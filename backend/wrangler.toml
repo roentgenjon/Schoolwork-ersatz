@@ -1,0 +1,25 @@
+name = "schoolwork-backend"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "schoolwork-db"
+database_id = "placeholder-replace-with-real-id"
+
+[[kv_namespaces]]
+binding = "SESSIONS"
+id = "placeholder-replace-with-real-id"
+preview_id = "placeholder-replace-with-real-id"
+
+[durable_objects]
+bindings = [
+  { name = "CHAT_ROOM", class_name = "ChatRoom" }
+]
+
+[[migrations]]
+tag = "v1"
+new_classes = ["ChatRoom"]
+
+[vars]
+FRONTEND_URL = "https://schoolwork.pages.dev"
