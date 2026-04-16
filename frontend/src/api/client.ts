@@ -1,4 +1,12 @@
+import { mockRequest } from './mock'
+
 const BASE_URL = '/api'
+
+// Automatisch Mock-Modus wenn auf GitHub Pages oder Backend nicht erreichbar
+const IS_GITHUB_PAGES = window.location.hostname.endsWith('github.io')
+  || window.location.hostname.endsWith('github.com')
+
+let useMock = IS_GITHUB_PAGES
 
 function getToken(): string | null {
   return localStorage.getItem('token')
@@ -9,7 +17,7 @@ function removeToken(): void {
 }
 
 function redirectToOnboarding(): void {
-  window.location.href = '/onboarding'
+  window.location.hash = '#/onboarding'
 }
 
 async function request<T>(
@@ -18,24 +26,33 @@ async function request<T>(
   body?: unknown
 ): Promise<T> {
   const token = getToken()
-  const headers: HeadersInit = {
-    'Content-Type': 'application/json',
+
+  // Mock-Modus: direkt die Mock-API aufrufen
+  if (useMock) {
+    return mockRequest<T>(method, path, body ?? null, token)
   }
 
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`
+  const headers: HeadersInit = { 'Content-Type': 'application/json' }
+  if (token) headers['Authorization'] = `Bearer ${token}`
+
+  const options: RequestInit = { method, headers }
+  if (body !== undefined) options.body = JSON.stringify(body)
+
+  let response: Response
+  try {
+    response = await fetch(`${BASE_URL}${path}`, options)
+  } catch {
+    // Netzwerkfehler → auf Mock umschalten
+    console.warn('Backend nicht erreichbar, wechsle zu Mock-Modus')
+    useMock = true
+    return mockRequest<T>(method, path, body ?? null, token)
   }
 
-  const options: RequestInit = {
-    method,
-    headers,
+  // 404/405 von GitHub Pages → Mock
+  if (response.status === 404 || response.status === 405) {
+    useMock = true
+    return mockRequest<T>(method, path, body ?? null, token)
   }
-
-  if (body !== undefined) {
-    options.body = JSON.stringify(body)
-  }
-
-  const response = await fetch(`${BASE_URL}${path}`, options)
 
   if (response.status === 401) {
     removeToken()
@@ -47,37 +64,19 @@ async function request<T>(
     let errorMessage = `HTTP error ${response.status}`
     try {
       const errorData = (await response.json()) as { error?: string }
-      if (errorData.error) {
-        errorMessage = errorData.error
-      }
-    } catch {
-      // ignore parse errors
-    }
+      if (errorData.error) errorMessage = errorData.error
+    } catch { /* ignore */ }
     throw new Error(errorMessage)
   }
 
   const text = await response.text()
-  if (!text) {
-    return undefined as unknown as T
-  }
-
+  if (!text) return undefined as unknown as T
   return JSON.parse(text) as T
 }
 
 export const client = {
-  get<T>(path: string): Promise<T> {
-    return request<T>('GET', path)
-  },
-
-  post<T>(path: string, body?: unknown): Promise<T> {
-    return request<T>('POST', path, body)
-  },
-
-  put<T>(path: string, body?: unknown): Promise<T> {
-    return request<T>('PUT', path, body)
-  },
-
-  del<T>(path: string): Promise<T> {
-    return request<T>('DELETE', path)
-  },
+  get<T>(path: string): Promise<T> { return request<T>('GET', path) },
+  post<T>(path: string, body?: unknown): Promise<T> { return request<T>('POST', path, body) },
+  put<T>(path: string, body?: unknown): Promise<T> { return request<T>('PUT', path, body) },
+  del<T>(path: string): Promise<T> { return request<T>('DELETE', path) },
 }
