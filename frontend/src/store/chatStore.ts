@@ -3,7 +3,9 @@ import { client } from '../api/client'
 import { sendChatMessage } from '../api/mock'
 import type { ChatRoom, ChatMessage } from '../types'
 
-const IS_MOCK = window.location.hostname.endsWith('github.io')
+const IS_GITHUB_PAGES = window.location.hostname.endsWith('github.io')
+const WORKER_WS = 'wss://schoolwork-backend.jonathanrontgen7.workers.dev'
+const IS_MOCK = false
 
 interface ChatStore {
   rooms: ChatRoom[]
@@ -57,11 +59,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     if (ws) ws.close()
 
     const token = localStorage.getItem('token')
-    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const wsHost = window.location.hostname === 'localhost'
-      ? 'localhost:8787'
-      : window.location.host
-    const wsUrl = `${wsProtocol}//${wsHost}/api/chat/rooms/${roomId}/ws${token ? `?token=${token}` : ''}`
+    const wsBase = IS_GITHUB_PAGES
+      ? WORKER_WS
+      : `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.hostname === 'localhost' ? 'localhost:8787' : window.location.host}/api`
+    const wsUrl = `${wsBase}/chat/rooms/${roomId}/ws${token ? `?token=${token}` : ''}`
 
     const socket = new WebSocket(wsUrl)
     socket.onopen = () => set({ ws: socket })

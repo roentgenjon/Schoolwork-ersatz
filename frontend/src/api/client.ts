@@ -1,12 +1,13 @@
 import { mockRequest } from './mock'
 
-const BASE_URL = '/api'
+const WORKER_URL = 'https://schoolwork-backend.jonathanrontgen7.workers.dev'
 
-// Automatisch Mock-Modus wenn auf GitHub Pages oder Backend nicht erreichbar
+// Auf GitHub Pages → Cloudflare Worker direkt ansprechen
 const IS_GITHUB_PAGES = window.location.hostname.endsWith('github.io')
-  || window.location.hostname.endsWith('github.com')
+const BASE_URL = IS_GITHUB_PAGES ? WORKER_URL : '/api'
 
-let useMock = IS_GITHUB_PAGES
+// Mock nur als Fallback wenn Worker auch nicht erreichbar
+let useMock = false
 
 function getToken(): string | null {
   return localStorage.getItem('token')
@@ -27,7 +28,6 @@ async function request<T>(
 ): Promise<T> {
   const token = getToken()
 
-  // Mock-Modus: direkt die Mock-API aufrufen
   if (useMock) {
     return mockRequest<T>(method, path, body ?? null, token)
   }
@@ -42,13 +42,11 @@ async function request<T>(
   try {
     response = await fetch(`${BASE_URL}${path}`, options)
   } catch {
-    // Netzwerkfehler → auf Mock umschalten
     console.warn('Backend nicht erreichbar, wechsle zu Mock-Modus')
     useMock = true
     return mockRequest<T>(method, path, body ?? null, token)
   }
 
-  // 404/405 von GitHub Pages → Mock
   if (response.status === 404 || response.status === 405) {
     useMock = true
     return mockRequest<T>(method, path, body ?? null, token)
