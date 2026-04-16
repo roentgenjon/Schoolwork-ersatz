@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { client } from '../api/client'
 import { sendChatMessage } from '../api/mock'
-import type { ChatRoom, ChatMessage } from '../types'
+import type { ChatRoom, ChatMessage, User } from '../types'
 
 const IS_GITHUB_PAGES = window.location.hostname.endsWith('github.io')
 const WORKER_WS = 'wss://schoolwork-backend.jonathanrontgen7.workers.dev'
@@ -19,6 +19,7 @@ interface ChatStore {
   connectToRoom: (roomId: string) => void
   sendMessage: (content: string) => void
   setActiveRoom: (roomId: string) => void
+  createDmRoom: (target: User) => Promise<ChatRoom>
   disconnect: () => void
 }
 
@@ -121,6 +122,15 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         r.id === roomId ? { ...r, unread_count: 0 } : r
       ),
     }))
+  },
+
+  createDmRoom: async (target: User): Promise<ChatRoom> => {
+    const room = await client.post<ChatRoom>('/chat/rooms/dm', { target_user_id: target.id })
+    set((state) => {
+      const exists = state.rooms.find((r) => r.id === room.id)
+      return exists ? {} : { rooms: [...state.rooms, room] }
+    })
+    return room
   },
 
   disconnect: () => {

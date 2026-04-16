@@ -6,6 +6,8 @@ import {
   getChatRoomsForStudent,
   getChatRoom,
   getRecentMessages,
+  insertChatRoom,
+  getUser,
 } from '../db/queries';
 
 const chat = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -46,6 +48,31 @@ chat.get('/rooms/:id/messages', async (c) => {
 
   const messages = await getRecentMessages(c.env.DB, roomId, 50);
   return c.json(messages);
+});
+
+// POST /api/chat/rooms/dm — DM-Raum erstellen oder bestehenden zurückgeben
+chat.post('/rooms/dm', async (c) => {
+  const user = c.get('user');
+  const body = await c.req.json<{ target_user_id: string }>();
+  const targetId = body.target_user_id;
+
+  if (!targetId || targetId === user.id) {
+    return c.json({ error: 'Invalid target user' }, 400);
+  }
+  const target = await getUser(c.env.DB, targetId);
+  if (!target) return c.json({ error: 'User not found' }, 404);
+
+  // Stabiler Raum-ID: kleinere ID zuerst
+  const [a, b] = [user.id, targetId].sort();
+  const roomId = `dm_${a}_${b}`;
+  const roomName = target.name;
+
+  let room = await getChatRoom(c.env.DB, roomId);
+  if (!room) {
+    room = { id: roomId, name: roomName, type: 'dm', class_id: null };
+    await insertChatRoom(c.env.DB, room);
+  }
+  return c.json(room);
 });
 
 // WS /api/chat/ws/:room_id — upgrade to WebSocket via Durable Object

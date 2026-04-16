@@ -254,7 +254,25 @@ function deleteUser(id: string) {
 function getChatRooms(user: User): ChatRoom[] {
   const all = load<ChatRoom[]>('chat_rooms', [])
   const myClassIds = getClasses(user).map(c => `class_${c.id}`)
-  return all.filter(r => r.type === 'global' || myClassIds.includes(r.id))
+  return all.filter(r =>
+    r.type === 'global' ||
+    myClassIds.includes(r.id) ||
+    (r.type === 'dm' && r.id.includes(user.id))
+  )
+}
+
+function createOrGetDmRoom(user: User, targetId: string): ChatRoom {
+  const users = load<User[]>('users', [])
+  const target = users.find(u => u.id === targetId)
+  if (!target) throw new Error('User not found')
+  const [a, b] = [user.id, targetId].sort()
+  const roomId = `dm_${a}_${b}`
+  const rooms = load<ChatRoom[]>('chat_rooms', [])
+  const existing = rooms.find(r => r.id === roomId)
+  if (existing) return existing
+  const room: ChatRoom = { id: roomId, name: target.name, type: 'dm', class_id: null }
+  save('chat_rooms', [...rooms, room])
+  return room
 }
 
 function getChatMessages(roomId: string): ChatMessage[] {
@@ -418,6 +436,13 @@ export async function mockRequest<T>(
   if (method === 'GET' && path === '/chat/rooms') {
     if (!user) throw new Error('Unauthorized')
     return getChatRooms(user) as T
+  }
+
+  // POST /chat/rooms/dm
+  if (method === 'POST' && path === '/chat/rooms/dm') {
+    if (!user) throw new Error('Unauthorized')
+    const { target_user_id } = body as { target_user_id: string }
+    return createOrGetDmRoom(user, target_user_id) as T
   }
 
   // GET /chat/rooms/:id/messages
