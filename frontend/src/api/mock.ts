@@ -31,75 +31,18 @@ function now(): number {
   return Math.floor(Date.now() / 1000)
 }
 
-// ─── Seed-Daten (beim ersten Start) ────────────────────────────────────────
-
-function seedIfEmpty() {
-  if (load<User[]>('users', []).length > 0) return
-
-  const teacher: User = { id: uid(), name: 'Frau Müller', role: 'teacher', created_at: now() }
-  const student1: User = { id: uid(), name: 'Max Muster', role: 'student', created_at: now() }
-  const student2: User = { id: uid(), name: 'Anna Schmidt', role: 'student', created_at: now() }
-  save('users', [teacher, student1, student2])
-
-  const cls: Class = {
-    id: uid(), name: '10b', subject: 'Mathematik',
-    teacher_id: teacher.id, color: '#007AFF', icon: '🧮',
-    created_at: now(), student_count: 2,
+// Globalen Chat-Raum sicherstellen (immer vorhanden, ohne Demo-Daten)
+function ensureGlobalRoom() {
+  const rooms = load<ChatRoom[]>('chat_rooms', [])
+  if (!rooms.find(r => r.id === 'global')) {
+    save('chat_rooms', [...rooms, { id: 'global', name: 'Alle', type: 'global', class_id: null }])
   }
-  save('classes', [cls])
-  save(`class_members_${cls.id}`, [student1.id, student2.id])
-
-  const a1: Assignment = {
-    id: uid(), class_id: cls.id, title: 'Lineare Gleichungen',
-    description: 'Löse die Aufgaben auf Seite 45–47.',
-    type: 'quiz', due_date: now() + 7 * 86400, points: 100,
-    created_by: teacher.id, created_at: now(),
-  }
-  const a2: Assignment = {
-    id: uid(), class_id: cls.id, title: 'Geometrie Handout',
-    description: 'Lies das Handout und beantworte die Fragen.',
-    type: 'handout', due_date: now() + 3 * 86400, points: 50,
-    created_by: teacher.id, created_at: now(),
-  }
-  save('assignments', [a1, a2])
-
-  const sub1: Submission = {
-    id: uid(), assignment_id: a1.id, student_id: student1.id,
-    status: 'turned_in', score: null, feedback: null,
-    submitted_at: now(), updated_at: now(),
-  }
-  const sub2: Submission = {
-    id: uid(), assignment_id: a1.id, student_id: student2.id,
-    status: 'graded', score: 92, feedback: 'Sehr gut gemacht!',
-    submitted_at: now() - 86400, updated_at: now(),
-  }
-  save('submissions', [sub1, sub2])
-
-  const handout: Handout = {
-    id: uid(), class_id: cls.id, title: 'Geometrie Grundlagen',
-    description: 'Einführung in Dreiecke und Vierecke',
-    file_url: 'https://example.com/geometrie.pdf',
-    file_type: 'application/pdf',
-    created_by: teacher.id, created_at: now(),
-  }
-  save('handouts', [handout])
-
-  const globalRoom: ChatRoom = { id: 'global', name: 'Alle', type: 'global', class_id: null }
-  const classRoom: ChatRoom = { id: `class_${cls.id}`, name: `10b – Mathe`, type: 'class', class_id: cls.id }
-  save('chat_rooms', [globalRoom, classRoom])
-
-  const msg: ChatMessage = {
-    id: uid(), room_id: 'global', sender_id: teacher.id,
-    content: 'Willkommen bei SchoolWork! 🎉',
-    created_at: now() - 3600,
-  }
-  save('chat_messages', [msg])
 }
 
 // ─── Auth ───────────────────────────────────────────────────────────────────
 
 function register(name: string, role: Role): { user: User; token: string } {
-  seedIfEmpty()
+  ensureGlobalRoom()
   const user: User = { id: uid(), name, role, created_at: now() }
   const users = load<User[]>('users', [])
   save('users', [...users, user])
@@ -350,8 +293,6 @@ export async function mockRequest<T>(
 ): Promise<T> {
   // Simulate small network delay
   await new Promise(r => setTimeout(r, 80))
-
-  seedIfEmpty()
 
   const user = token ? (() => { try { return getUser(token) } catch { return null } })() : null
   const segments = path.replace(/^\//, '').split('/')
