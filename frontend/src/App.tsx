@@ -7,6 +7,7 @@ import AssignmentsPage from './pages/AssignmentsPage'
 import ProgressPage from './pages/ProgressPage'
 import HandoutsPage from './pages/HandoutsPage'
 import ChatPage from './pages/ChatPage'
+import UsersPage from './pages/UsersPage'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth()
@@ -72,6 +73,14 @@ export default function App() {
         element={
           <PrivateRoute>
             <ChatPage />
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/users"
+        element={
+          <PrivateRoute>
+            <UsersPage />
           </PrivateRoute>
         }
       />

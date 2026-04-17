@@ -7,6 +7,7 @@ import {
   MessageSquare,
   LogOut,
   LayoutDashboard,
+  Users,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useAuth } from '../../hooks/useAuth'
@@ -15,6 +16,7 @@ interface NavItem {
   to: string
   icon: React.ReactNode
   label: string
+  adminOnly?: boolean
 }
 
 const navItems: NavItem[] = [
@@ -24,6 +26,7 @@ const navItems: NavItem[] = [
   { to: '/progress', icon: <TrendingUp size={20} />, label: 'Fortschritt' },
   { to: '/handouts', icon: <FileText size={20} />, label: 'Handouts' },
   { to: '/chat', icon: <MessageSquare size={20} />, label: 'Chat' },
+  { to: '/users', icon: <Users size={20} />, label: 'Nutzer', adminOnly: true },
 ]
 
 const roleLabels: Record<string, string> = {
@@ -33,13 +36,15 @@ const roleLabels: Record<string, string> = {
 }
 
 export default function Sidebar() {
-  const { user, logout, initials } = useAuth()
+  const { user, logout, initials, isStudent, isAdmin } = useAuth()
   const navigate = useNavigate()
 
   const handleLogout = () => {
     logout()
     navigate('/onboarding')
   }
+
+  const visibleItems = navItems.filter(item => !item.adminOnly || isAdmin)
 
   return (
     <aside
@@ -60,7 +65,7 @@ export default function Sidebar() {
       {/* Navigation */}
       <nav className="flex-1 px-3 py-4 ios-scroll">
         <ul className="space-y-1">
-          {navItems.map((item) => (
+          {visibleItems.map((item) => (
             <li key={item.to}>
               <NavLink
                 to={item.to}
@@ -103,13 +108,15 @@ export default function Sidebar() {
             </p>
           </div>
         </div>
-        <button
-          onClick={handleLogout}
-          className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-[#FF3B30] hover:bg-[#2C2C2E] transition-all duration-200 ease-in-out min-h-[44px]"
-        >
-          <LogOut size={20} />
-          <span className="text-sm">Abmelden</span>
-        </button>
+        {!isStudent && (
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-[#FF3B30] hover:bg-[#2C2C2E] transition-all duration-200 ease-in-out min-h-[44px]"
+          >
+            <LogOut size={20} />
+            <span className="text-sm">Abmelden</span>
+          </button>
+        )}
       </div>
     </aside>
   )
