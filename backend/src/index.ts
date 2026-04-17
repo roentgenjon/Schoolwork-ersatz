@@ -9,6 +9,7 @@ import handoutRoutes from './routes/handouts';
 import progressRoutes from './routes/progress';
 import studentRoutes from './routes/students';
 import chatRoutes from './routes/chat';
+import settingsRoutes from './routes/settings';
 
 // Re-export Durable Object so Cloudflare Workers can find it
 export { ChatRoom } from './durable/ChatRoom';
@@ -34,12 +35,12 @@ app.use(
   })
 );
 
-// ── Auth middleware: skip only POST /api/auth/register ───────────────────────
+// ── Auth middleware: skip public endpoints ────────────────────────────────────
 app.use('/api/*', async (c, next) => {
-  // Register is the only public endpoint
-  if (c.req.method === 'POST' && c.req.path === '/api/auth/register') {
-    return next();
-  }
+  const path = c.req.path;
+  const method = c.req.method;
+  if (method === 'POST' && path === '/api/auth/register') return next();
+  if (method === 'GET' && path === '/api/auth/setup') return next();
   return authMiddleware(c, next);
 });
 
@@ -54,6 +55,7 @@ app.route('/api/handouts', handoutRoutes);
 app.route('/api/progress', progressRoutes);
 app.route('/api/users', studentRoutes);
 app.route('/api/chat', chatRoutes);
+app.route('/api/settings', settingsRoutes);
 
 // ── Health check ──────────────────────────────────────────────────────────────
 app.get('/health', (c) => c.json({ status: 'ok', timestamp: Date.now() }));

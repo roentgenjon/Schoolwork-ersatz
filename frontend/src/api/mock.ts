@@ -39,12 +39,54 @@ function ensureGlobalRoom() {
   }
 }
 
+// ─── Settings ───────────────────────────────────────────────────────────────
+
+interface AppSettings {
+  allow_admin_register: boolean
+  open_registration: boolean
+}
+
+const DEFAULT_SETTINGS: AppSettings = { allow_admin_register: true, open_registration: true }
+
+function getSettings(): AppSettings {
+  return load<AppSettings>('settings', DEFAULT_SETTINGS)
+}
+
+function saveSettings(s: AppSettings) {
+  save('settings', s)
+}
+
+function getSetupInfo() {
+  const users = load<User[]>('users', [])
+  return { hasUsers: users.length > 0, settings: getSettings() }
+}
+
 // ─── Auth ───────────────────────────────────────────────────────────────────
 
 function register(name: string, role: Role): { user: User; token: string } {
   ensureGlobalRoom()
-  const user: User = { id: uid(), name, role, created_at: now() }
   const users = load<User[]>('users', [])
+  const settings = getSettings()
+
+  let effectiveRole = role
+
+  if (users.length === 0) {
+    // First user → always admin
+    effectiveRole = 'admin'
+  } else if (!settings.open_registration) {
+    // Closed mode: must match pre-created account
+    const existing = users.find(u => u.name.trim().toLowerCase() === name.trim().toLowerCase())
+    if (!existing) throw new Error('Kein Konto für diesen Namen gefunden. Wende dich an den Administrator.')
+    const token = uid()
+    save(`session_${token}`, existing)
+    return { user: existing, token }
+  } else {
+    if (!settings.allow_admin_register && role === 'admin') {
+      throw new Error('Admin-Konten können nicht selbst erstellt werden.')
+    }
+  }
+
+  const user: User = { id: uid(), name: name.trim(), role: effectiveRole, created_at: now() }
   save('users', [...users, user])
   const token = uid()
   save(`session_${token}`, user)
@@ -54,6 +96,13 @@ function register(name: string, role: Role): { user: User; token: string } {
 function me(token: string): User {
   const user = load<User | null>(`session_${token}`, null)
   if (!user) throw new Error('Unauthorized')
+  return user
+}
+
+function createUserByAdmin(name: string, role: Role): User {
+  const users = load<User[]>('users', [])
+  const user: User = { id: uid(), name: name.trim(), role, created_at: now() }
+  save('users', [...users, user])
   return user
 }
 
@@ -315,6 +364,11 @@ export async function mockRequest<T>(
   const user = token ? (() => { try { return getUser(token) } catch { return null } })() : null
   const segments = path.replace(/^\//, '').split('/')
 
+  // GET /auth/setup
+  if (method === 'GET' && path === '/auth/setup') {
+    return getSetupInfo() as T
+  }
+
   // POST /auth/register
   if (method === 'POST' && path === '/auth/register') {
     const { name, role } = body as { name: string; role: Role }
@@ -325,6 +379,19 @@ export async function mockRequest<T>(
   if (method === 'GET' && path === '/auth/me') {
     if (!user) throw new Error('Unauthorized')
     return user as T
+  }
+
+  // GET /settings
+  if (method === 'GET' && path === '/settings') {
+    return getSettings() as T
+  }
+
+  // PUT /settings
+  if (method === 'PUT' && path === '/settings') {
+    if (!user || user.role !== 'admin') throw new Error('Forbidden')
+    const updated = body as AppSettings
+    saveSettings(updated)
+    return updated as T
   }
 
   // GET /classes
@@ -424,6 +491,13 @@ export async function mockRequest<T>(
   // GET /users
   if (method === 'GET' && path === '/users') {
     return getUsers() as T
+  }
+
+  // POST /users — admin creates account
+  if (method === 'POST' && path === '/users') {
+    if (!user || user.role !== 'admin') throw new Error('Forbidden')
+    const { name, role: r } = body as { name: string; role: Role }
+    return createUserByAdmin(name, r) as T
   }
 
   // DELETE /users/:id

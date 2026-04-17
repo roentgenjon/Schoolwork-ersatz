@@ -6,6 +6,8 @@ import type { Role, User } from '../../types'
 
 interface NameInputScreenProps {
   role: Role
+  isFirstUser?: boolean
+  isClosedMode?: boolean
 }
 
 interface RegisterResponse {
@@ -13,7 +15,7 @@ interface RegisterResponse {
   token: string
 }
 
-export default function NameInputScreen({ role }: NameInputScreenProps) {
+export default function NameInputScreen({ role, isFirstUser = false, isClosedMode = false }: NameInputScreenProps) {
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [loading, setLoading] = useState(false)
@@ -43,9 +45,15 @@ export default function NameInputScreen({ role }: NameInputScreenProps) {
   return (
     <div className="flex flex-col items-center justify-center h-full w-full px-8">
       <div className="w-full max-w-sm">
-        <h2 className="text-3xl font-bold text-white text-center mb-2">Wie heißt du?</h2>
+        <h2 className="text-3xl font-bold text-white text-center mb-2">
+          {isFirstUser ? 'Admin-Konto erstellen' : isClosedMode ? 'Anmelden' : 'Wie heißt du?'}
+        </h2>
         <p className="text-[#8E8E93] text-center mb-10">
-          Gib deinen Namen ein, um dein Konto zu erstellen.
+          {isFirstUser
+            ? 'Du bist der erste Nutzer und wirst automatisch Administrator.'
+            : isClosedMode
+              ? 'Gib deinen Namen ein. Du musst vom Administrator eingeladen worden sein.'
+              : 'Gib deinen Namen ein, um dein Konto zu erstellen.'}
         </p>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">

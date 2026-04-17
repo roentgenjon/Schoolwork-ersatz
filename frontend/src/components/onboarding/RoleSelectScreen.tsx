@@ -34,13 +34,16 @@ interface RoleSelectScreenProps {
   selectedRole: Role | null
   onSelectRole: (role: Role) => void
   onNext: () => void
+  allowAdmin?: boolean
 }
 
 export default function RoleSelectScreen({
   selectedRole,
   onSelectRole,
   onNext,
+  allowAdmin = true,
 }: RoleSelectScreenProps) {
+  const visibleOptions = roleOptions.filter(o => o.role !== 'admin' || allowAdmin)
   return (
     <div className="flex flex-col items-center justify-center h-full w-full px-8">
       <div className="w-full max-w-2xl">
@@ -48,7 +51,7 @@ export default function RoleSelectScreen({
         <p className="text-[#8E8E93] text-center mb-10">Wähle deine Rolle aus, um loszulegen.</p>
 
         <div className="flex flex-col md:flex-row gap-4 justify-center">
-          {roleOptions.map((option) => {
+          {visibleOptions.map((option) => {
             const isSelected = selectedRole === option.role
             return (
               <button
