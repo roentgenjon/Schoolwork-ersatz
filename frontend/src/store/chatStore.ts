@@ -3,7 +3,7 @@ import { client } from '../api/client'
 import type { ChatRoom, ChatMessage, User } from '../types'
 
 const IS_GITHUB_PAGES = window.location.hostname.endsWith('github.io')
-const WORKER_WS = 'wss://schoolwork-backend.jonathanrontgen7.workers.dev'
+const WORKER_WS = 'wss://schoolwork-backend.jonathanrontgen7.workers.dev/api'
 
 interface ChatStore {
   rooms: ChatRoom[]

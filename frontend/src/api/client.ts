@@ -1,6 +1,7 @@
-const WORKER_URL = 'https://schoolwork-backend.jonathanrontgen7.workers.dev'
 const IS_GITHUB_PAGES = window.location.hostname.endsWith('github.io')
-const BASE_URL = IS_GITHUB_PAGES ? WORKER_URL : '/api'
+const BASE_URL = IS_GITHUB_PAGES
+  ? 'https://schoolwork-backend.jonathanrontgen7.workers.dev/api'
+  : '/api'
 
 function getToken(): string | null {
   return localStorage.getItem('token')
