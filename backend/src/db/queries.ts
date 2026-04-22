@@ -385,14 +385,16 @@ export async function getChatRoomsForStudent(
 ): Promise<ChatRoom[]> {
   const result = await db
     .prepare(
-      `SELECT r.* FROM chat_rooms r
-       WHERE r.type = 'global'
+      `SELECT r.* FROM chat_rooms r WHERE r.type = 'global'
        UNION
        SELECT r.* FROM chat_rooms r
        INNER JOIN class_members cm ON cm.class_id = r.class_id
-       WHERE r.type = 'class' AND cm.student_id = ?`
+       WHERE r.type = 'class' AND cm.student_id = ?
+       UNION
+       SELECT r.* FROM chat_rooms r
+       WHERE r.type = 'dm' AND (r.id LIKE '%' || ? || '%')`
     )
-    .bind(studentId)
+    .bind(studentId, studentId)
     .all<ChatRoom>();
   return result.results;
 }
@@ -403,14 +405,16 @@ export async function getChatRoomsForTeacher(
 ): Promise<ChatRoom[]> {
   const result = await db
     .prepare(
-      `SELECT r.* FROM chat_rooms r
-       WHERE r.type = 'global'
+      `SELECT r.* FROM chat_rooms r WHERE r.type = 'global'
        UNION
        SELECT r.* FROM chat_rooms r
        INNER JOIN classes c ON c.id = r.class_id
-       WHERE r.type = 'class' AND c.teacher_id = ?`
+       WHERE r.type = 'class' AND c.teacher_id = ?
+       UNION
+       SELECT r.* FROM chat_rooms r
+       WHERE r.type = 'dm' AND (r.id LIKE '%' || ? || '%')`
     )
-    .bind(teacherId)
+    .bind(teacherId, teacherId)
     .all<ChatRoom>();
   return result.results;
 }

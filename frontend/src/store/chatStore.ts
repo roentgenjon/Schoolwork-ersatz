@@ -1,11 +1,9 @@
 import { create } from 'zustand'
 import { client } from '../api/client'
-import { sendChatMessage } from '../api/mock'
 import type { ChatRoom, ChatMessage, User } from '../types'
 
 const IS_GITHUB_PAGES = window.location.hostname.endsWith('github.io')
 const WORKER_WS = 'wss://schoolwork-backend.jonathanrontgen7.workers.dev'
-const IS_MOCK = false
 
 interface ChatStore {
   rooms: ChatRoom[]
@@ -53,9 +51,6 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   },
 
   connectToRoom: (roomId: string) => {
-    // Im Mock-Modus kein WebSocket nötig
-    if (IS_MOCK) return
-
     const { ws } = get()
     if (ws) ws.close()
 
@@ -63,7 +58,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     const wsBase = IS_GITHUB_PAGES
       ? WORKER_WS
       : `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.hostname === 'localhost' ? 'localhost:8787' : window.location.host}/api`
-    const wsUrl = `${wsBase}/chat/rooms/${roomId}/ws${token ? `?token=${token}` : ''}`
+    const wsUrl = `${wsBase}/chat/ws/${roomId}${token ? `?token=${token}` : ''}`
 
     const socket = new WebSocket(wsUrl)
     socket.onopen = () => set({ ws: socket })
@@ -82,32 +77,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   },
 
   sendMessage: (content: string) => {
-    const { ws, activeRoom } = get()
-
-    // Mock-Modus: direkt in localStorage speichern und State updaten
-    if (IS_MOCK || !ws) {
-      if (!activeRoom) return
-      const token = localStorage.getItem('token')
-      if (!token) return
-      // Nutzer aus localStorage holen
-      const authRaw = localStorage.getItem('auth-storage')
-      if (!authRaw) return
-      const auth = JSON.parse(authRaw) as { state: { user: { id: string; name: string; role: string } } }
-      const user = auth.state?.user
-      if (!user) return
-      const msg = sendChatMessage(
-        { id: user.id, name: user.name, role: user.role as 'teacher' | 'student' | 'admin', created_at: 0 },
-        activeRoom,
-        content
-      )
-      set((state) => {
-        const existing = state.messages[activeRoom] ?? []
-        return { messages: { ...state.messages, [activeRoom]: [...existing, msg] } }
-      })
-      return
-    }
-
-    if (ws.readyState === WebSocket.OPEN) {
+    const { ws } = get()
+    if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: 'message', content }))
     }
   },
