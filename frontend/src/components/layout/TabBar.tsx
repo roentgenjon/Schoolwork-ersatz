@@ -5,24 +5,23 @@ import {
   ClipboardList,
   FileText,
   MessageSquare,
+  Users,
 } from 'lucide-react'
 import { clsx } from 'clsx'
-
-interface TabItem {
-  to: string
-  icon: React.ReactNode
-  label: string
-}
-
-const tabs: TabItem[] = [
-  { to: '/', icon: <LayoutDashboard size={22} />, label: 'Dashboard' },
-  { to: '/classes', icon: <BookOpen size={22} />, label: 'Klassen' },
-  { to: '/assignments', icon: <ClipboardList size={22} />, label: 'Aufgaben' },
-  { to: '/handouts', icon: <FileText size={22} />, label: 'Handouts' },
-  { to: '/chat', icon: <MessageSquare size={22} />, label: 'Chat' },
-]
+import { useAuth } from '../../hooks/useAuth'
 
 export default function TabBar() {
+  const { isAdmin } = useAuth()
+
+  const tabs = [
+    { to: '/', icon: <LayoutDashboard size={22} />, label: 'Dashboard' },
+    { to: '/classes', icon: <BookOpen size={22} />, label: 'Klassen' },
+    { to: '/assignments', icon: <ClipboardList size={22} />, label: 'Aufgaben' },
+    { to: '/handouts', icon: <FileText size={22} />, label: 'Handouts' },
+    { to: '/chat', icon: <MessageSquare size={22} />, label: 'Chat' },
+    ...(isAdmin ? [{ to: '/users', icon: <Users size={22} />, label: 'Nutzer' }] : []),
+  ]
+
   return (
     <nav
       className="md:hidden flex items-center justify-around px-2 pb-safe-bottom"
