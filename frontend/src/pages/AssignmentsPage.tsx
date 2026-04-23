@@ -12,6 +12,8 @@ import {
   Send,
   Upload,
   Download,
+  Pencil,
+  Trash2,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import AppLayout from '../components/layout/AppLayout'
@@ -90,6 +92,8 @@ export default function AssignmentsPage() {
     submissions,
     fetchAssignments,
     createAssignment,
+    updateAssignment,
+    deleteAssignment,
     submitAssignment,
     fetchSubmissions,
   } = useAssignmentStore()
@@ -97,6 +101,7 @@ export default function AssignmentsPage() {
   const { isTeacher, isAdmin, isStudent, user } = useAuth()
   const [activeTab, setActiveTab] = useState<TabFilter>('all')
   const [showCreateModal, setShowCreateModal] = useState(false)
+  const [editingAssignment, setEditingAssignment] = useState<Assignment | null>(null)
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [dragging, setDragging] = useState(false)
@@ -148,6 +153,34 @@ export default function AssignmentsPage() {
     })
   }
 
+  function openEdit(a: Assignment) {
+    setEditingAssignment(a)
+    setForm({
+      title: a.title,
+      description: a.description ?? '',
+      type: a.type,
+      class_id: a.class_id,
+      due_date: a.due_date ? new Date(a.due_date).toISOString().slice(0, 10) : '',
+      points: String(a.points),
+      file_url: a.file_url ?? '',
+      file_name: a.file_url ? '(vorhandene Datei)' : '',
+    })
+    setError(null)
+    setShowCreateModal(true)
+  }
+
+  function closeModal() {
+    setShowCreateModal(false)
+    setEditingAssignment(null)
+    setForm({ title: '', description: '', type: 'quiz', class_id: '', due_date: '', points: '100', file_url: '', file_name: '' })
+    setError(null)
+  }
+
+  async function handleDelete(a: Assignment) {
+    if (!confirm(`Aufgabe "${a.title}" wirklich löschen?`)) return
+    await deleteAssignment(a.id)
+  }
+
   async function handleFile(file: File) {
     if (file.size > MAX_FILE_BYTES) {
       setError(`Datei zu groß. Maximal ${Math.round(MAX_FILE_BYTES / 1024)} KB erlaubt.`)
@@ -170,7 +203,7 @@ export default function AssignmentsPage() {
     setCreating(true)
     setError(null)
     try {
-      await createAssignment({
+      const data = {
         title: form.title.trim(),
         description: form.description.trim(),
         type: form.type,
@@ -178,18 +211,13 @@ export default function AssignmentsPage() {
         due_date: form.due_date ? new Date(form.due_date).getTime() : null,
         points: parseInt(form.points) || 100,
         file_url: form.file_url || null,
-      })
-      setShowCreateModal(false)
-      setForm({
-        title: '',
-        description: '',
-        type: 'quiz',
-        class_id: '',
-        due_date: '',
-        points: '100',
-        file_url: '',
-        file_name: '',
-      })
+      }
+      if (editingAssignment) {
+        await updateAssignment(editingAssignment.id, data)
+      } else {
+        await createAssignment(data)
+      }
+      closeModal()
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -353,19 +381,25 @@ export default function AssignmentsPage() {
                             </button>
                           )}
                         {(isTeacher || isAdmin) && (
-                          <span
-                            className="flex items-center gap-1 text-xs"
-                            style={{ color: '#8E8E93' }}
-                          >
-                            <CheckCircle size={12} />
-                            {
-                              allSubs.filter(
-                                (s) =>
-                                  s.status === 'turned_in' || s.status === 'graded'
-                              ).length
-                            }
-                            /{allSubs.length}
-                          </span>
+                          <>
+                            <span className="flex items-center gap-1 text-xs" style={{ color: '#8E8E93' }}>
+                              <CheckCircle size={12} />
+                              {allSubs.filter(s => s.status === 'turned_in' || s.status === 'graded').length}
+                              /{allSubs.length}
+                            </span>
+                            <div className="flex items-center gap-1 mt-1">
+                              <button onClick={() => openEdit(assignment)}
+                                className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-[#2C2C2E] transition-all"
+                                style={{ color: '#8E8E93' }} title="Bearbeiten">
+                                <Pencil size={14} />
+                              </button>
+                              <button onClick={() => handleDelete(assignment)}
+                                className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-[#2C2C2E] transition-all"
+                                style={{ color: '#FF3B30' }} title="Löschen">
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          </>
                         )}
                       </div>
                     </div>
@@ -382,16 +416,16 @@ export default function AssignmentsPage() {
             <div
               className="absolute inset-0"
               style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}
-              onClick={() => setShowCreateModal(false)}
+              onClick={closeModal}
             />
             <div
               className="relative w-full md:max-w-lg rounded-t-3xl md:rounded-2xl p-6 z-10 max-h-[85vh] flex flex-col"
               style={{ backgroundColor: '#1C1C1E' }}
             >
               <div className="flex items-center justify-between mb-6 shrink-0">
-                <h3 className="text-white font-semibold text-lg">Neue Aufgabe</h3>
+                <h3 className="text-white font-semibold text-lg">{editingAssignment ? 'Aufgabe bearbeiten' : 'Neue Aufgabe'}</h3>
                 <button
-                  onClick={() => setShowCreateModal(false)}
+                  onClick={closeModal}
                   className="w-8 h-8 rounded-full flex items-center justify-center text-[#8E8E93] hover:bg-[#2C2C2E]"
                 >
                   <X size={18} />
@@ -565,7 +599,7 @@ export default function AssignmentsPage() {
                         : '#8E8E93',
                   }}
                 >
-                  {creating ? 'Wird erstellt...' : 'Aufgabe erstellen'}
+                  {creating ? (editingAssignment ? 'Wird gespeichert...' : 'Wird erstellt...') : (editingAssignment ? 'Änderungen speichern' : 'Aufgabe erstellen')}
                 </button>
               </form>
             </div>

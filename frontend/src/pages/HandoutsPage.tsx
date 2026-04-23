@@ -10,6 +10,8 @@ import {
   ExternalLink,
   Upload,
   Download,
+  Pencil,
+  Trash2,
 } from 'lucide-react'
 import AppLayout from '../components/layout/AppLayout'
 import Header from '../components/layout/Header'
@@ -60,6 +62,7 @@ export default function HandoutsPage() {
   const [handouts, setHandouts] = useState<Handout[]>([])
   const [loading, setLoading] = useState(false)
   const [showCreateModal, setShowCreateModal] = useState(false)
+  const [editingHandout, setEditingHandout] = useState<Handout | null>(null)
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [dragging, setDragging] = useState(false)
@@ -89,6 +92,35 @@ export default function HandoutsPage() {
     fetchHandouts()
     fetchClasses()
   }, [fetchClasses])
+
+  function openEdit(h: Handout) {
+    setEditingHandout(h)
+    setForm({
+      title: h.title,
+      description: h.description ?? '',
+      file_url: h.file_url ?? '',
+      file_name: h.file_url ? '(vorhandene Datei)' : '',
+      file_type: h.file_type ?? 'application/pdf',
+      class_id: h.class_id,
+    })
+    setError(null)
+    setShowCreateModal(true)
+  }
+
+  function closeModal() {
+    setShowCreateModal(false)
+    setEditingHandout(null)
+    setForm({ title: '', description: '', file_url: '', file_name: '', file_type: 'application/pdf', class_id: '' })
+    setError(null)
+  }
+
+  async function handleDelete(h: Handout) {
+    if (!confirm(`"${h.title}" wirklich löschen?`)) return
+    try {
+      await client.del(`/handouts/${h.id}`)
+      setHandouts(prev => prev.filter(x => x.id !== h.id))
+    } catch { /* ignore */ }
+  }
 
   async function handleFile(file: File) {
     if (file.size > MAX_FILE_BYTES) {
@@ -130,20 +162,29 @@ export default function HandoutsPage() {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!form.title.trim() || !form.file_url || !form.class_id) return
+    if (!form.title.trim() || !form.class_id) return
+    if (!editingHandout && !form.file_url) return
     setCreating(true)
     setError(null)
     try {
-      const newHandout = await client.post<Handout>('/handouts', {
-        title: form.title.trim(),
-        description: form.description.trim(),
-        file_url: form.file_url,
-        file_type: form.file_type,
-        class_id: form.class_id,
-      })
-      setHandouts(prev => [newHandout, ...prev])
-      setShowCreateModal(false)
-      setForm({ title: '', description: '', file_url: '', file_name: '', file_type: 'application/pdf', class_id: '' })
+      if (editingHandout) {
+        const updated = await client.put<Handout>(`/handouts/${editingHandout.id}`, {
+          title: form.title.trim(),
+          description: form.description.trim(),
+          class_id: form.class_id,
+        })
+        setHandouts(prev => prev.map(h => h.id === editingHandout.id ? updated : h))
+      } else {
+        const newHandout = await client.post<Handout>('/handouts', {
+          title: form.title.trim(),
+          description: form.description.trim(),
+          file_url: form.file_url,
+          file_type: form.file_type,
+          class_id: form.class_id,
+        })
+        setHandouts(prev => [newHandout, ...prev])
+      }
+      closeModal()
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -240,12 +281,32 @@ export default function HandoutsPage() {
                       </div>
                     </div>
 
-                    <button
-                      onClick={() => openHandout(handout)}
-                      className="w-10 h-10 rounded-full flex items-center justify-center text-[#007AFF] hover:bg-[#2C2C2E] transition-all duration-200 shrink-0"
-                    >
-                      {isData ? <Download size={18} /> : <ExternalLink size={18} />}
-                    </button>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        onClick={() => openHandout(handout)}
+                        className="w-10 h-10 rounded-full flex items-center justify-center text-[#007AFF] hover:bg-[#2C2C2E] transition-all duration-200"
+                      >
+                        {isData ? <Download size={18} /> : <ExternalLink size={18} />}
+                      </button>
+                      {(isTeacher || isAdmin) && (
+                        <>
+                          <button
+                            onClick={() => openEdit(handout)}
+                            className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-[#2C2C2E] transition-all"
+                            style={{ color: '#8E8E93' }} title="Bearbeiten"
+                          >
+                            <Pencil size={15} />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(handout)}
+                            className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-[#2C2C2E] transition-all"
+                            style={{ color: '#FF3B30' }} title="Löschen"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
                 )
               })}
@@ -258,16 +319,16 @@ export default function HandoutsPage() {
             <div
               className="absolute inset-0"
               style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}
-              onClick={() => setShowCreateModal(false)}
+              onClick={closeModal}
             />
             <div
               className="relative w-full md:max-w-lg rounded-t-3xl md:rounded-2xl p-6 z-10 max-h-[90vh] flex flex-col"
               style={{ backgroundColor: '#1C1C1E' }}
             >
               <div className="flex items-center justify-between mb-5 shrink-0">
-                <h3 className="text-white font-semibold text-lg">Neues Material</h3>
+                <h3 className="text-white font-semibold text-lg">{editingHandout ? 'Material bearbeiten' : 'Neues Material'}</h3>
                 <button
-                  onClick={() => setShowCreateModal(false)}
+                  onClick={closeModal}
                   className="w-8 h-8 rounded-full flex items-center justify-center text-[#8E8E93] hover:bg-[#2C2C2E]"
                 >
                   <X size={18} />
@@ -275,8 +336,8 @@ export default function HandoutsPage() {
               </div>
 
               <form onSubmit={handleCreate} className="space-y-4 ios-scroll flex-1 overflow-y-auto">
-                {/* File drop zone */}
-                <div
+                {/* File drop zone — only shown when creating, not editing */}
+                {!editingHandout && <div
                   onDragOver={onDragOver}
                   onDragLeave={onDragLeave}
                   onDrop={onDrop}
@@ -312,7 +373,7 @@ export default function HandoutsPage() {
                     onChange={onFileInput}
                     accept="*/*"
                   />
-                </div>
+                </div>}
 
                 <div className="flex flex-col rounded-xl overflow-hidden" style={{ backgroundColor: '#2C2C2E' }}>
                   <label className="px-4 pt-3 text-xs text-[#8E8E93] font-medium uppercase tracking-wide">
@@ -362,14 +423,14 @@ export default function HandoutsPage() {
 
                 <button
                   type="submit"
-                  disabled={!form.title.trim() || !form.file_url || !form.class_id || creating}
+                  disabled={!form.title.trim() || (!editingHandout && !form.file_url) || !form.class_id || creating}
                   className="w-full py-4 rounded-xl font-semibold transition-all duration-200 active:scale-95 min-h-[52px]"
                   style={{
                     backgroundColor: form.title.trim() && form.file_url && form.class_id && !creating ? '#007AFF' : '#2C2C2E',
                     color: form.title.trim() && form.file_url && form.class_id && !creating ? '#fff' : '#8E8E93',
                   }}
                 >
-                  {creating ? 'Wird gespeichert...' : 'Material erstellen'}
+                  {creating ? 'Wird gespeichert...' : editingHandout ? 'Änderungen speichern' : 'Material erstellen'}
                 </button>
               </form>
             </div>

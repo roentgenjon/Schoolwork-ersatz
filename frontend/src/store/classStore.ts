@@ -9,6 +9,7 @@ interface ClassStore {
   error: string | null
   fetchClasses: () => Promise<void>
   createClass: (data: Omit<Class, 'id' | 'created_at' | 'teacher_id'>) => Promise<void>
+  updateClass: (id: string, data: Partial<Pick<Class, 'name' | 'subject' | 'color' | 'icon'>>) => Promise<Class>
   selectClass: (id: string) => void
   deleteClass: (id: string) => Promise<void>
 }
@@ -41,6 +42,15 @@ export const useClassStore = create<ClassStore>((set, get) => ({
       set({ error: (err as Error).message, loading: false })
       throw err
     }
+  },
+
+  updateClass: async (id, data) => {
+    const updated = await client.put<Class>(`/classes/${id}`, data)
+    set(state => ({
+      classes: state.classes.map(c => c.id === id ? updated : c),
+      selectedClass: state.selectedClass?.id === id ? updated : state.selectedClass,
+    }))
+    return updated
   },
 
   selectClass: (id: string) => {

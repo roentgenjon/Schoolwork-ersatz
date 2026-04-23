@@ -10,6 +10,8 @@ interface AssignmentStore {
   fetchAssignments: () => Promise<void>
   fetchSubmissions: (assignmentId: string) => Promise<void>
   createAssignment: (data: Omit<Assignment, 'id' | 'created_at' | 'created_by'>) => Promise<void>
+  updateAssignment: (id: string, data: Partial<Omit<Assignment, 'id' | 'created_at' | 'created_by'>>) => Promise<void>
+  deleteAssignment: (id: string) => Promise<void>
   submitAssignment: (assignmentId: string) => Promise<void>
   gradeSubmission: (submissionId: string, score: number, feedback: string) => Promise<void>
 }
@@ -51,6 +53,32 @@ export const useAssignmentStore = create<AssignmentStore>((set, get) => ({
       }))
     } catch (err) {
       set({ error: (err as Error).message, loading: false })
+      throw err
+    }
+  },
+
+  updateAssignment: async (id, data) => {
+    set({ loading: true, error: null })
+    try {
+      const updated = await client.put<Assignment>(`/assignments/${id}`, data)
+      set(state => ({
+        assignments: state.assignments.map(a => a.id === id ? updated : a),
+        loading: false,
+      }))
+    } catch (err) {
+      set({ error: (err as Error).message, loading: false })
+      throw err
+    }
+  },
+
+  deleteAssignment: async (id: string) => {
+    try {
+      await client.del(`/assignments/${id}`)
+      set(state => ({
+        assignments: state.assignments.filter(a => a.id !== id),
+      }))
+    } catch (err) {
+      set({ error: (err as Error).message })
       throw err
     }
   },

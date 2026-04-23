@@ -7,6 +7,7 @@ import {
   getHandout,
   insertHandout,
   deleteHandout,
+  updateHandout,
   getClass,
   isClassMember,
 } from '../db/queries';
@@ -67,6 +68,30 @@ handouts.post('/', async (c) => {
 
   await insertHandout(c.env.DB, handout);
   return c.json(handout, 201);
+});
+
+// PUT /api/handouts/:id
+handouts.put('/:id', async (c) => {
+  const user = c.get('user');
+  const id = c.req.param('id');
+  if (user.role === 'student') return c.json({ error: 'Forbidden' }, 403);
+
+  const handout = await getHandout(c.env.DB, id);
+  if (!handout) return c.json({ error: 'Not found' }, 404);
+
+  if (user.role === 'teacher') {
+    const cls = await getClass(c.env.DB, handout.class_id);
+    if (!cls || cls.teacher_id !== user.id) return c.json({ error: 'Forbidden' }, 403);
+  }
+
+  const body = await c.req.json<{ title?: string; description?: string; class_id?: string }>();
+  await updateHandout(c.env.DB, id, {
+    title: body.title?.trim(),
+    description: body.description,
+    class_id: body.class_id,
+  });
+  const updated = await getHandout(c.env.DB, id);
+  return c.json(updated);
 });
 
 // DELETE /api/handouts/:id

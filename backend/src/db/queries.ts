@@ -368,6 +368,21 @@ export async function deleteHandout(db: D1Database, id: string): Promise<void> {
   await db.prepare('DELETE FROM handouts WHERE id = ?').bind(id).run();
 }
 
+export async function updateHandout(
+  db: D1Database,
+  id: string,
+  fields: Partial<Pick<Handout, 'title' | 'description' | 'class_id'>>
+): Promise<void> {
+  const sets: string[] = [];
+  const values: unknown[] = [];
+  if (fields.title !== undefined) { sets.push('title = ?'); values.push(fields.title); }
+  if (fields.description !== undefined) { sets.push('description = ?'); values.push(fields.description); }
+  if (fields.class_id !== undefined) { sets.push('class_id = ?'); values.push(fields.class_id); }
+  if (sets.length === 0) return;
+  values.push(id);
+  await db.prepare(`UPDATE handouts SET ${sets.join(', ')} WHERE id = ?`).bind(...values).run();
+}
+
 // ── Chat ──────────────────────────────────────────────────────────────────────
 
 export async function getChatRoom(db: D1Database, id: string): Promise<ChatRoom | null> {
