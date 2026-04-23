@@ -1,7 +1,7 @@
 export type Role = 'admin' | 'teacher' | 'student'
 export type AssignmentType = 'quiz' | 'handout' | 'activity' | 'book_report' | 'collaboration'
 export type SubmissionStatus = 'not_started' | 'in_progress' | 'turned_in' | 'returned' | 'graded'
-export type ChatRoomType = 'global' | 'class' | 'dm'
+export type ChatRoomType = 'global' | 'class' | 'dm' | 'group'
 
 export interface User {
   id: string
