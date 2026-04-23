@@ -32,23 +32,39 @@ students.post('/', async (c) => {
   return c.json(newUser, 201);
 });
 
-// PUT /api/users/:id — admin changes role
+// PUT /api/users/:id — admin changes name and/or role
 students.put('/:id', async (c) => {
   const user = c.get('user');
   if (user.role !== 'admin') return c.json({ error: 'Forbidden' }, 403);
 
   const id = c.req.param('id');
-  if (id === user.id) return c.json({ error: 'Eigene Rolle kann nicht geändert werden' }, 400);
+  if (id === user.id) return c.json({ error: 'Eigenes Konto kann nicht geändert werden' }, 400);
 
   const target = await getUser(c.env.DB, id);
   if (!target) return c.json({ error: 'User not found' }, 404);
 
-  const body = await c.req.json<{ role?: string }>();
-  if (!body.role || !['admin', 'teacher', 'student'].includes(body.role)) {
-    return c.json({ error: 'Ungültige Rolle' }, 400);
+  const body = await c.req.json<{ role?: string; name?: string }>();
+
+  const sets: string[] = [];
+  const values: unknown[] = [];
+
+  if (body.name?.trim()) {
+    sets.push('name = ?');
+    values.push(body.name.trim());
   }
 
-  await c.env.DB.prepare('UPDATE users SET role = ? WHERE id = ?').bind(body.role, id).run();
+  if (body.role) {
+    if (!['admin', 'teacher', 'student'].includes(body.role)) {
+      return c.json({ error: 'Ungültige Rolle' }, 400);
+    }
+    sets.push('role = ?');
+    values.push(body.role);
+  }
+
+  if (sets.length === 0) return c.json({ error: 'Keine Felder angegeben' }, 400);
+
+  values.push(id);
+  await c.env.DB.prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`).bind(...values).run();
   const updated = await getUser(c.env.DB, id);
   return c.json(updated);
 });

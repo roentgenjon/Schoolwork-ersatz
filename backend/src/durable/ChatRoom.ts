@@ -1,13 +1,15 @@
 import type { Env } from '../types';
-import { insertChatMessage, getRecentMessages } from '../db/queries';
+import { insertChatMessage } from '../db/queries';
 
 interface SessionMeta {
   userId: string;
   userName: string;
+  userRole: string;
+  roomId: string;
 }
 
 interface WsMessage {
-  type: 'message' | 'join' | 'leave' | 'history';
+  type: 'message' | 'join' | 'leave';
   data: Record<string, unknown>;
 }
 
@@ -28,9 +30,11 @@ export class ChatRoom implements DurableObject {
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
-    const roomId = url.pathname.split('/').pop() ?? 'unknown';
+    const pathParts = url.pathname.split('/');
+    const roomId = pathParts[pathParts.length - 1] ?? 'unknown';
     const userId = url.searchParams.get('userId') ?? 'anonymous';
     const userName = url.searchParams.get('userName') ?? 'Anonymous';
+    const userRole = url.searchParams.get('userRole') ?? 'student';
 
     // Upgrade to WebSocket
     const upgradeHeader = request.headers.get('Upgrade');
@@ -41,21 +45,9 @@ export class ChatRoom implements DurableObject {
     const { 0: client, 1: server } = new WebSocketPair();
     this.state.acceptWebSocket(server);
 
-    const meta: SessionMeta = { userId, userName };
+    const meta: SessionMeta = { userId, userName, userRole, roomId };
     server.serializeAttachment(meta);
     this.sessions.set(server, meta);
-
-    // Send recent message history to the newly joined client
-    try {
-      const history = await getRecentMessages(this.env.DB, roomId, 50);
-      const historyMsg: WsMessage = {
-        type: 'history',
-        data: { messages: history },
-      };
-      server.send(JSON.stringify(historyMsg));
-    } catch {
-      // History fetch failure is non-fatal
-    }
 
     // Announce join to all other clients
     this.broadcast(
@@ -73,7 +65,7 @@ export class ChatRoom implements DurableObject {
     const meta = this.sessions.get(ws);
     if (!meta) return;
 
-    let payload: { content?: string; room_id?: string };
+    let payload: { content?: string };
     try {
       payload = JSON.parse(typeof raw === 'string' ? raw : new TextDecoder().decode(raw));
     } catch {
@@ -81,8 +73,8 @@ export class ChatRoom implements DurableObject {
       return;
     }
 
-    if (!payload.content || !payload.room_id) {
-      ws.send(JSON.stringify({ type: 'error', data: { message: 'content and room_id are required' } }));
+    if (!payload.content) {
+      ws.send(JSON.stringify({ type: 'error', data: { message: 'content is required' } }));
       return;
     }
 
@@ -93,7 +85,7 @@ export class ChatRoom implements DurableObject {
     try {
       await insertChatMessage(this.env.DB, {
         id: messageId,
-        room_id: payload.room_id,
+        room_id: meta.roomId,
         sender_id: meta.userId,
         content: payload.content,
         created_at: now,
@@ -108,9 +100,10 @@ export class ChatRoom implements DurableObject {
       type: 'message',
       data: {
         id: messageId,
-        room_id: payload.room_id,
+        room_id: meta.roomId,
         sender_id: meta.userId,
         sender_name: meta.userName,
+        sender_role: meta.userRole,
         content: payload.content,
         created_at: now,
       },

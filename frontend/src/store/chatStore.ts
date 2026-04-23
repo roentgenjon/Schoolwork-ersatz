@@ -19,6 +19,7 @@ interface ChatStore {
   setActiveRoom: (roomId: string) => void
   createDmRoom: (target: User) => Promise<ChatRoom>
   createGroupRoom: (name: string, memberIds: string[]) => Promise<ChatRoom>
+  deleteRoom: (roomId: string) => Promise<void>
   disconnect: () => void
 }
 
@@ -65,11 +66,16 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     socket.onopen = () => set({ ws: socket })
     socket.onmessage = (event: MessageEvent) => {
       try {
-        const message = JSON.parse(event.data as string) as ChatMessage
-        set((state) => {
-          const existing = state.messages[roomId] ?? []
-          return { messages: { ...state.messages, [roomId]: [...existing, message] } }
-        })
+        const envelope = JSON.parse(event.data as string) as { type: string; data: unknown }
+        if (envelope.type === 'message') {
+          const message = envelope.data as ChatMessage
+          set((state) => {
+            const existing = state.messages[roomId] ?? []
+            // Avoid duplicates
+            if (existing.find((m) => m.id === message.id)) return state
+            return { messages: { ...state.messages, [roomId]: [...existing, message] } }
+          })
+        }
       } catch { /* ignore */ }
     }
     socket.onerror = () => set({ error: 'WebSocket connection error' })
@@ -109,6 +115,20 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     const room = await client.post<ChatRoom>('/chat/rooms/group', { name, member_ids: memberIds })
     set((state) => ({ rooms: [...state.rooms, room] }))
     return room
+  },
+
+  deleteRoom: async (roomId: string) => {
+    const { ws, activeRoom } = get()
+    if (activeRoom === roomId && ws) {
+      ws.close()
+      set({ ws: null })
+    }
+    await client.del(`/chat/rooms/${roomId}`)
+    set((state) => ({
+      rooms: state.rooms.filter((r) => r.id !== roomId),
+      messages: Object.fromEntries(Object.entries(state.messages).filter(([k]) => k !== roomId)),
+      activeRoom: state.activeRoom === roomId ? null : state.activeRoom,
+    }))
   },
 
   disconnect: () => {

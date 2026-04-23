@@ -37,6 +37,7 @@ export default function UsersPage() {
   const [removing, setRemoving] = useState<string | null>(null)
   const [editingRole, setEditingRole] = useState<string | null>(null)
   const [editRoleValue, setEditRoleValue] = useState('')
+  const [editNameValue, setEditNameValue] = useState('')
   const [savingRole, setSavingRole] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
@@ -71,13 +72,19 @@ export default function UsersPage() {
   function startEditRole(u: User) {
     setEditingRole(u.id)
     setEditRoleValue(u.role)
+    setEditNameValue(u.name)
   }
 
   async function saveRole(u: User) {
-    if (editRoleValue === u.role) { setEditingRole(null); return }
+    const nameChanged = editNameValue.trim() && editNameValue.trim() !== u.name
+    const roleChanged = editRoleValue !== u.role
+    if (!nameChanged && !roleChanged) { setEditingRole(null); return }
     setSavingRole(true)
     try {
-      const updated = await client.put<User>(`/users/${u.id}`, { role: editRoleValue })
+      const body: { role?: string; name?: string } = {}
+      if (roleChanged) body.role = editRoleValue
+      if (nameChanged) body.name = editNameValue.trim()
+      const updated = await client.put<User>(`/users/${u.id}`, body)
       setUsers(prev => prev.map(x => x.id === u.id ? updated : x))
     } catch { /* ignore */ }
     setSavingRole(false)
@@ -237,27 +244,38 @@ export default function UsersPage() {
 
                           {/* Name + role */}
                           <div className="flex-1 min-w-0">
-                            <p className="text-white font-medium text-sm truncate">
-                              {u.name}{isMe ? ' (ich)' : ''}
-                            </p>
                             {isEditing ? (
-                              <select
-                                value={editRoleValue}
-                                onChange={e => setEditRoleValue(e.target.value)}
-                                className="mt-0.5 text-xs rounded-lg px-2 py-1 outline-none appearance-none"
-                                style={{ backgroundColor: '#2C2C2E', color: '#fff' }}
-                                autoFocus
-                              >
-                                {ROLE_OPTIONS.map(o => (
-                                  <option key={o.value} value={o.value} style={{ backgroundColor: '#2C2C2E' }}>
-                                    {o.label}
-                                  </option>
-                                ))}
-                              </select>
+                              <div className="flex flex-col gap-1">
+                                <input
+                                  value={editNameValue}
+                                  onChange={e => setEditNameValue(e.target.value)}
+                                  className="text-sm rounded-lg px-2 py-1 outline-none w-full"
+                                  style={{ backgroundColor: '#2C2C2E', color: '#fff' }}
+                                  placeholder="Name"
+                                  autoFocus
+                                />
+                                <select
+                                  value={editRoleValue}
+                                  onChange={e => setEditRoleValue(e.target.value)}
+                                  className="text-xs rounded-lg px-2 py-1 outline-none appearance-none"
+                                  style={{ backgroundColor: '#2C2C2E', color: '#fff' }}
+                                >
+                                  {ROLE_OPTIONS.map(o => (
+                                    <option key={o.value} value={o.value} style={{ backgroundColor: '#2C2C2E' }}>
+                                      {o.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
                             ) : (
-                              <p className="text-xs mt-0.5" style={{ color: roleColor(u.role) }}>
-                                {roleLabel(u.role)}
-                              </p>
+                              <>
+                                <p className="text-white font-medium text-sm truncate">
+                                  {u.name}{isMe ? ' (ich)' : ''}
+                                </p>
+                                <p className="text-xs mt-0.5" style={{ color: roleColor(u.role) }}>
+                                  {roleLabel(u.role)}
+                                </p>
+                              </>
                             )}
                           </div>
 

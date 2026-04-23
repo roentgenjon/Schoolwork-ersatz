@@ -469,6 +469,12 @@ export async function getRecentMessages(
   return result.results;
 }
 
+export async function deleteChatRoom(db: D1Database, id: string): Promise<void> {
+  await db.prepare('DELETE FROM chat_messages WHERE room_id = ?').bind(id).run();
+  await db.prepare('DELETE FROM chat_room_members WHERE room_id = ?').bind(id).run();
+  await db.prepare('DELETE FROM chat_rooms WHERE id = ?').bind(id).run();
+}
+
 export async function insertChatMessage(db: D1Database, msg: ChatMessage): Promise<void> {
   await db
     .prepare(

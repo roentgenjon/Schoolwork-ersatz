@@ -9,6 +9,7 @@ import {
   insertChatRoom,
   insertChatRoomMember,
   getChatRoomMemberIds,
+  deleteChatRoom,
   getUser,
   isClassMember,
   getClass,
@@ -89,6 +90,37 @@ chat.post('/rooms/group', async (c) => {
     await insertChatRoomMember(c.env.DB, roomId, memberId);
   }
   return c.json(room);
+});
+
+// DELETE /api/chat/rooms/:id
+chat.delete('/rooms/:id', async (c) => {
+  const user = c.get('user');
+  const roomId = c.req.param('id');
+
+  const room = await getChatRoom(c.env.DB, roomId);
+  if (!room) return c.json({ error: 'Room not found' }, 404);
+
+  if (room.type === 'global') {
+    if (user.role !== 'admin') return c.json({ error: 'Forbidden' }, 403);
+  } else if (room.type === 'class') {
+    if (user.role === 'student') return c.json({ error: 'Forbidden' }, 403);
+    if (user.role === 'teacher' && room.class_id) {
+      const cls = await getClass(c.env.DB, room.class_id);
+      if (!cls || cls.teacher_id !== user.id) return c.json({ error: 'Forbidden' }, 403);
+    }
+  } else if (room.type === 'dm') {
+    if (!roomId.includes(user.id) && user.role !== 'admin') {
+      return c.json({ error: 'Forbidden' }, 403);
+    }
+  } else if (room.type === 'group') {
+    if (user.role !== 'admin') {
+      const members = await getChatRoomMemberIds(c.env.DB, roomId);
+      if (!members.includes(user.id)) return c.json({ error: 'Forbidden' }, 403);
+    }
+  }
+
+  await deleteChatRoom(c.env.DB, roomId);
+  return c.json({ success: true });
 });
 
 // WS /api/chat/ws/:room_id

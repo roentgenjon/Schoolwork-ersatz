@@ -61,7 +61,7 @@ export interface Handout {
   created_at: number;
 }
 
-export type ChatRoomType = 'global' | 'class' | 'dm';
+export type ChatRoomType = 'global' | 'class' | 'dm' | 'group';
 
 export interface ChatMessage {
   id: string;

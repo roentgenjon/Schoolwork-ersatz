@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Send, Hash, MessageCircle, Plus, X, Search, Users, User as UserIcon } from 'lucide-react'
+import { Send, Hash, MessageCircle, Plus, X, Search, Users, User as UserIcon, Trash2 } from 'lucide-react'
 import AppLayout from '../components/layout/AppLayout'
 import Header from '../components/layout/Header'
 import { useChatStore } from '../store/chatStore'
@@ -10,9 +10,9 @@ import type { ChatMessage, ChatRoom, User } from '../types'
 type PickerMode = 'dm' | 'group' | null
 
 export default function ChatPage() {
-  const { rooms, messages, activeRoom, fetchRooms, setActiveRoom, sendMessage, createDmRoom, createGroupRoom } =
+  const { rooms, messages, activeRoom, fetchRooms, setActiveRoom, sendMessage, createDmRoom, createGroupRoom, deleteRoom } =
     useChatStore()
-  const { user } = useAuth()
+  const { user, isAdmin } = useAuth()
   const [input, setInput] = useState('')
   const [pickerMode, setPickerMode] = useState<PickerMode>(null)
   const [showModeMenu, setShowModeMenu] = useState(false)
@@ -81,6 +81,20 @@ export default function ChatPage() {
         ? prev.filter(m => m.id !== u.id)
         : [...prev, u]
     )
+  }
+
+  async function handleDeleteRoom(roomId: string) {
+    if (!confirm('Chat löschen?')) return
+    try {
+      await deleteRoom(roomId)
+    } catch { /* ignore */ }
+  }
+
+  function canDeleteRoom(room: ChatRoom): boolean {
+    if (isAdmin) return room.type !== 'global'
+    if (room.type === 'dm') return room.id.includes(user?.id ?? '')
+    if (room.type === 'group') return true
+    return false
   }
 
   function handleSend(e: React.FormEvent) {
@@ -160,11 +174,11 @@ export default function ChatPage() {
             {rooms.map((room) => {
               const colors = roomColor(room.type)
               return (
-                <button
+                <div
                   key={room.id}
-                  onClick={() => setActiveRoom(room.id)}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 text-left transition-all duration-200 rounded-xl mx-1"
+                  className="group flex items-center gap-3 px-3 py-2.5 rounded-xl mx-1 cursor-pointer transition-all duration-200"
                   style={{ width: 'calc(100% - 8px)', backgroundColor: activeRoom === room.id ? '#2C2C2E' : 'transparent' }}
+                  onClick={() => setActiveRoom(room.id)}
                 >
                   <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 text-sm font-semibold"
                     style={{ backgroundColor: colors.bg, color: colors.fg }}>
@@ -184,7 +198,17 @@ export default function ChatPage() {
                       {room.unread_count}
                     </span>
                   )}
-                </button>
+                  {canDeleteRoom(room) && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleDeleteRoom(room.id) }}
+                      className="w-6 h-6 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                      style={{ color: '#FF3B30' }}
+                      title="Chat löschen"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  )}
+                </div>
               )
             })}
           </div>

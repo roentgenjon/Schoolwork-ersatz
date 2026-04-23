@@ -75,6 +75,25 @@ classes.post('/', async (c) => {
   return c.json(cls, 201);
 });
 
+// GET /api/classes/:id/students
+classes.get('/:id/students', async (c) => {
+  const user = c.get('user');
+  const id = c.req.param('id');
+
+  const cls = await getClass(c.env.DB, id);
+  if (!cls) return c.json({ error: 'Class not found' }, 404);
+
+  if (user.role === 'student') {
+    const member = await isClassMember(c.env.DB, id, user.id);
+    if (!member) return c.json({ error: 'Forbidden' }, 403);
+  } else if (user.role === 'teacher' && cls.teacher_id !== user.id) {
+    return c.json({ error: 'Forbidden' }, 403);
+  }
+
+  const students = await getClassStudents(c.env.DB, id);
+  return c.json(students);
+});
+
 // GET /api/classes/:id
 classes.get('/:id', async (c) => {
   const user = c.get('user');
