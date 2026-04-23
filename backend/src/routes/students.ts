@@ -32,6 +32,27 @@ students.post('/', async (c) => {
   return c.json(newUser, 201);
 });
 
+// PUT /api/users/:id — admin changes role
+students.put('/:id', async (c) => {
+  const user = c.get('user');
+  if (user.role !== 'admin') return c.json({ error: 'Forbidden' }, 403);
+
+  const id = c.req.param('id');
+  if (id === user.id) return c.json({ error: 'Eigene Rolle kann nicht geändert werden' }, 400);
+
+  const target = await getUser(c.env.DB, id);
+  if (!target) return c.json({ error: 'User not found' }, 404);
+
+  const body = await c.req.json<{ role?: string }>();
+  if (!body.role || !['admin', 'teacher', 'student'].includes(body.role)) {
+    return c.json({ error: 'Ungültige Rolle' }, 400);
+  }
+
+  await c.env.DB.prepare('UPDATE users SET role = ? WHERE id = ?').bind(body.role, id).run();
+  const updated = await getUser(c.env.DB, id);
+  return c.json(updated);
+});
+
 // DELETE /api/users/:id — admin only
 students.delete('/:id', async (c) => {
   const user = c.get('user');

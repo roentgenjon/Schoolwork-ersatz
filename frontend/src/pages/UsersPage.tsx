@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { LogOut, Plus, X, ChevronDown, ChevronUp } from 'lucide-react'
+import { LogOut, Plus, X, ChevronDown, ChevronUp, Pencil, Check } from 'lucide-react'
 import AppLayout from '../components/layout/AppLayout'
 import Header from '../components/layout/Header'
 import { useAuth } from '../hooks/useAuth'
@@ -17,17 +17,33 @@ const ROLE_OPTIONS = [
   { value: 'admin', label: 'Admin' },
 ]
 
+const roleLabel = (role: string) =>
+  role === 'teacher' ? 'Lehrer' : role === 'admin' ? 'Admin' : 'Schüler'
+
+const roleColor = (role: string) =>
+  role === 'teacher' ? '#FF9F0A' : role === 'admin' ? '#BF5AF2' : '#007AFF'
+
+const groups: { label: string; role: string }[] = [
+  { label: 'Administratoren', role: 'admin' },
+  { label: 'Lehrer', role: 'teacher' },
+  { label: 'Schüler', role: 'student' },
+]
+
 export default function UsersPage() {
   const { user: me, isAdmin } = useAuth()
   const [users, setUsers] = useState<User[]>([])
   const [settings, setSettings] = useState<AppSettings>({ allow_admin_register: true, open_registration: true })
   const [loading, setLoading] = useState(true)
   const [removing, setRemoving] = useState<string | null>(null)
+  const [editingRole, setEditingRole] = useState<string | null>(null)
+  const [editRoleValue, setEditRoleValue] = useState('')
+  const [savingRole, setSavingRole] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [createForm, setCreateForm] = useState({ name: '', role: 'student' })
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
 
   useEffect(() => {
     if (!isAdmin) return
@@ -42,14 +58,30 @@ export default function UsersPage() {
   }, [isAdmin])
 
   async function handleRemove(target: User) {
-    if (!confirm(`${target.name} wirklich abmelden und entfernen?`)) return
+    if (!confirm(`${target.name} wirklich entfernen?`)) return
     setRemoving(target.id)
     try {
       await client.del(`/users/${target.id}`)
-      setUsers((prev) => prev.filter((u) => u.id !== target.id))
+      setUsers(prev => prev.filter(u => u.id !== target.id))
     } finally {
       setRemoving(null)
     }
+  }
+
+  function startEditRole(u: User) {
+    setEditingRole(u.id)
+    setEditRoleValue(u.role)
+  }
+
+  async function saveRole(u: User) {
+    if (editRoleValue === u.role) { setEditingRole(null); return }
+    setSavingRole(true)
+    try {
+      const updated = await client.put<User>(`/users/${u.id}`, { role: editRoleValue })
+      setUsers(prev => prev.map(x => x.id === u.id ? updated : x))
+    } catch { /* ignore */ }
+    setSavingRole(false)
+    setEditingRole(null)
   }
 
   async function handleSettingToggle(key: keyof AppSettings) {
@@ -58,7 +90,7 @@ export default function UsersPage() {
     try {
       await client.put<AppSettings>('/settings', updated)
     } catch {
-      setSettings(settings) // revert on error
+      setSettings(settings)
     }
   }
 
@@ -72,7 +104,7 @@ export default function UsersPage() {
         name: createForm.name.trim(),
         role: createForm.role,
       })
-      setUsers((prev) => [newUser, ...prev])
+      setUsers(prev => [newUser, ...prev])
       setCreateForm({ name: '', role: 'student' })
       setShowCreate(false)
     } catch (err) {
@@ -82,17 +114,9 @@ export default function UsersPage() {
     }
   }
 
-  const roleLabel = (role: string) =>
-    role === 'teacher' ? 'Lehrer' : role === 'admin' ? 'Admin' : 'Schüler'
-
-  const roleColor = (role: string) =>
-    role === 'teacher' ? '#FF9F0A' : role === 'admin' ? '#BF5AF2' : '#007AFF'
-
-  const groups = [
-    { label: 'Administratoren', role: 'admin' },
-    { label: 'Lehrer', role: 'teacher' },
-    { label: 'Schüler', role: 'student' },
-  ]
+  const filteredUsers = search.trim()
+    ? users.filter(u => u.name.toLowerCase().includes(search.toLowerCase()))
+    : users
 
   if (!isAdmin) {
     return (
@@ -120,22 +144,49 @@ export default function UsersPage() {
             </button>
           }
         />
-        <div className="flex-1 ios-scroll px-6 py-4 space-y-5">
+
+        <div className="flex-1 ios-scroll px-4 py-4 space-y-4">
+
+          {/* Stats bar */}
+          <div className="grid grid-cols-3 gap-3">
+            {groups.map(g => {
+              const count = users.filter(u => u.role === g.role).length
+              return (
+                <div key={g.role} className="flex flex-col items-center py-3 rounded-2xl" style={{ backgroundColor: '#1C1C1E' }}>
+                  <span className="text-2xl font-bold" style={{ color: roleColor(g.role) }}>{count}</span>
+                  <span className="text-[#8E8E93] text-xs mt-0.5">{g.label}</span>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Search */}
+          <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl" style={{ backgroundColor: '#1C1C1E' }}>
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Name suchen…"
+              className="flex-1 bg-transparent text-white text-sm outline-none placeholder-[#48484A]"
+            />
+            {search && (
+              <button onClick={() => setSearch('')} className="text-[#8E8E93]"><X size={14} /></button>
+            )}
+          </div>
 
           {/* Settings section */}
           <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: '#1C1C1E' }}>
             <button
-              onClick={() => setShowSettings((v) => !v)}
+              onClick={() => setShowSettings(v => !v)}
               className="w-full flex items-center justify-between px-4 py-3 text-left"
             >
               <span className="text-white font-semibold text-sm">Registrierungs-Einstellungen</span>
               {showSettings ? <ChevronUp size={16} className="text-[#8E8E93]" /> : <ChevronDown size={16} className="text-[#8E8E93]" />}
             </button>
             {showSettings && (
-              <div style={{ borderTop: '1px solid #38383A' }}>
+              <div>
                 <SettingRow
                   label="Offene Registrierung"
-                  description="Nutzer können sich selbst mit beliebigem Namen registrieren"
+                  description="Nutzer können sich selbst registrieren"
                   value={settings.open_registration}
                   onChange={() => handleSettingToggle('open_registration')}
                 />
@@ -151,62 +202,123 @@ export default function UsersPage() {
           </div>
 
           {/* User groups */}
-          {loading && (
+          {loading ? (
             <div className="flex items-center justify-center h-32">
               <p className="text-[#8E8E93]">Lade Nutzer…</p>
             </div>
-          )}
-          {!loading && groups.map(({ label, role }) => {
-            const group = users.filter((u) => u.role === role)
-            if (group.length === 0) return null
-            return (
-              <section key={role}>
-                <h3 className="text-[#8E8E93] text-xs font-semibold uppercase tracking-wider mb-2 px-1">
-                  {label} ({group.length})
-                </h3>
-                <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: '#1C1C1E' }}>
-                  {group.map((u, idx) => {
-                    const initials = u.name.split(' ').map((p) => p[0] ?? '').join('').toUpperCase().slice(0, 2)
-                    const isMe = u.id === me?.id
-                    return (
-                      <div
-                        key={u.id}
-                        className="flex items-center gap-3 px-4 py-3"
-                        style={{ borderTop: idx > 0 ? '1px solid #38383A' : 'none' }}
-                      >
+          ) : (
+            groups.map(({ label, role }) => {
+              const group = filteredUsers.filter(u => u.role === role)
+              if (group.length === 0) return null
+              return (
+                <section key={role}>
+                  <h3 className="text-[#8E8E93] text-xs font-semibold uppercase tracking-wider mb-2 px-1">
+                    {label} ({group.length})
+                  </h3>
+                  <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: '#1C1C1E' }}>
+                    {group.map((u, idx) => {
+                      const initials = u.name.split(' ').map(p => p[0] ?? '').join('').toUpperCase().slice(0, 2)
+                      const isMe = u.id === me?.id
+                      const isEditing = editingRole === u.id
+
+                      return (
                         <div
-                          className="w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold text-sm shrink-0"
-                          style={{ backgroundColor: roleColor(u.role) }}
+                          key={u.id}
+                          className="flex items-center gap-3 px-4 py-3"
+                          style={{ borderTop: idx > 0 ? '1px solid #38383A' : 'none' }}
                         >
-                          {initials}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-white font-medium text-sm truncate">
-                            {u.name}{isMe ? ' (ich)' : ''}
-                          </p>
-                          <p className="text-[#8E8E93] text-xs">{roleLabel(u.role)}</p>
-                        </div>
-                        {!isMe && (
-                          <button
-                            onClick={() => handleRemove(u)}
-                            disabled={removing === u.id}
-                            className="w-9 h-9 rounded-full flex items-center justify-center transition-all hover:bg-[#2C2C2E] disabled:opacity-40"
-                            title="Abmelden & entfernen"
-                            style={{ color: '#FF3B30' }}
+                          {/* Avatar */}
+                          <div
+                            className="w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold text-sm shrink-0"
+                            style={{ backgroundColor: roleColor(u.role) }}
                           >
-                            <LogOut size={17} />
-                          </button>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-              </section>
-            )
-          })}
-          {!loading && users.length === 0 && (
+                            {initials}
+                          </div>
+
+                          {/* Name + role */}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-white font-medium text-sm truncate">
+                              {u.name}{isMe ? ' (ich)' : ''}
+                            </p>
+                            {isEditing ? (
+                              <select
+                                value={editRoleValue}
+                                onChange={e => setEditRoleValue(e.target.value)}
+                                className="mt-0.5 text-xs rounded-lg px-2 py-1 outline-none appearance-none"
+                                style={{ backgroundColor: '#2C2C2E', color: '#fff' }}
+                                autoFocus
+                              >
+                                {ROLE_OPTIONS.map(o => (
+                                  <option key={o.value} value={o.value} style={{ backgroundColor: '#2C2C2E' }}>
+                                    {o.label}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <p className="text-xs mt-0.5" style={{ color: roleColor(u.role) }}>
+                                {roleLabel(u.role)}
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Actions */}
+                          {!isMe && (
+                            <div className="flex items-center gap-1 shrink-0">
+                              {isEditing ? (
+                                <>
+                                  <button
+                                    onClick={() => saveRole(u)}
+                                    disabled={savingRole}
+                                    className="w-8 h-8 rounded-full flex items-center justify-center transition-all hover:bg-[#2C2C2E] disabled:opacity-40"
+                                    style={{ color: '#34C759' }}
+                                    title="Speichern"
+                                  >
+                                    <Check size={16} />
+                                  </button>
+                                  <button
+                                    onClick={() => setEditingRole(null)}
+                                    className="w-8 h-8 rounded-full flex items-center justify-center transition-all hover:bg-[#2C2C2E]"
+                                    style={{ color: '#8E8E93' }}
+                                    title="Abbrechen"
+                                  >
+                                    <X size={16} />
+                                  </button>
+                                </>
+                              ) : (
+                                <button
+                                  onClick={() => startEditRole(u)}
+                                  className="w-8 h-8 rounded-full flex items-center justify-center transition-all hover:bg-[#2C2C2E]"
+                                  style={{ color: '#8E8E93' }}
+                                  title="Rolle ändern"
+                                >
+                                  <Pencil size={15} />
+                                </button>
+                              )}
+                              <button
+                                onClick={() => handleRemove(u)}
+                                disabled={removing === u.id}
+                                className="w-8 h-8 rounded-full flex items-center justify-center transition-all hover:bg-[#2C2C2E] disabled:opacity-40"
+                                style={{ color: '#FF3B30' }}
+                                title="Entfernen"
+                              >
+                                <LogOut size={16} />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </section>
+              )
+            })
+          )}
+
+          {!loading && filteredUsers.length === 0 && (
             <div className="flex items-center justify-center h-32">
-              <p className="text-[#8E8E93] text-sm">Keine Nutzer vorhanden.</p>
+              <p className="text-[#8E8E93] text-sm">
+                {search ? 'Keine Nutzer gefunden.' : 'Noch keine Nutzer vorhanden.'}
+              </p>
             </div>
           )}
         </div>
@@ -234,7 +346,7 @@ export default function UsersPage() {
                 <input
                   autoFocus
                   value={createForm.name}
-                  onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
+                  onChange={e => setCreateForm({ ...createForm, name: e.target.value })}
                   placeholder="Max Mustermann"
                   className="px-4 pb-3 pt-1 bg-transparent text-white w-full outline-none min-h-[44px]"
                 />
@@ -245,10 +357,10 @@ export default function UsersPage() {
                 </label>
                 <select
                   value={createForm.role}
-                  onChange={(e) => setCreateForm({ ...createForm, role: e.target.value })}
+                  onChange={e => setCreateForm({ ...createForm, role: e.target.value })}
                   className="px-4 pb-3 pt-1 bg-transparent text-white w-full outline-none min-h-[44px] appearance-none"
                 >
-                  {ROLE_OPTIONS.map((o) => (
+                  {ROLE_OPTIONS.map(o => (
                     <option key={o.value} value={o.value} style={{ backgroundColor: '#2C2C2E' }}>
                       {o.label}
                     </option>
@@ -256,6 +368,9 @@ export default function UsersPage() {
                 </select>
               </div>
               {createError && <p className="text-[#FF3B30] text-sm">{createError}</p>}
+              <p className="text-[#8E8E93] text-xs">
+                Das Konto kann sofort genutzt werden. Der Nutzer meldet sich mit diesem Namen an.
+              </p>
               <button
                 type="submit"
                 disabled={!createForm.name.trim() || creating}
