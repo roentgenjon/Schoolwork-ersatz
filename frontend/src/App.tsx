@@ -1,5 +1,7 @@
+import { useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './hooks/useAuth'
+import { useAuthStore } from './store/authStore'
 import OnboardingPage from './pages/OnboardingPage'
 import DashboardPage from './pages/DashboardPage'
 import ClassesPage from './pages/ClassesPage'
@@ -19,6 +21,11 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   const { isAuthenticated } = useAuth()
+  const refreshUser = useAuthStore((s) => s.refreshUser)
+
+  useEffect(() => {
+    refreshUser()
+  }, [])
 
   return (
     <Routes>

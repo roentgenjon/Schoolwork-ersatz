@@ -1,7 +1,7 @@
 import { useAuthStore } from '../store/authStore'
 
 export function useAuth() {
-  const { user, token, isAuthenticated, login, logout } = useAuthStore()
+  const { user, token, isAuthenticated, login, logout, refreshUser } = useAuthStore()
 
   const isTeacher = user?.role === 'teacher'
   const isStudent = user?.role === 'student'
@@ -25,6 +25,7 @@ export function useAuth() {
     isAdmin,
     login,
     logout,
+    refreshUser,
     initials: user ? getInitials(user.name) : '',
   }
 }
