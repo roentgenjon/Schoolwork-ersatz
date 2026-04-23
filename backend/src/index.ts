@@ -35,12 +35,14 @@ app.use(
   })
 );
 
-// ── Auth middleware: skip public endpoints ────────────────────────────────────
+// ── Auth middleware: skip public endpoints + WebSocket upgrades ───────────────
 app.use('/api/*', async (c, next) => {
   const path = c.req.path;
   const method = c.req.method;
   if (method === 'POST' && path === '/api/auth/register') return next();
   if (method === 'GET' && path === '/api/auth/setup') return next();
+  // WebSocket upgrades pass token as query param — the route handles its own auth
+  if (c.req.header('Upgrade')?.toLowerCase() === 'websocket') return next();
   return authMiddleware(c, next);
 });
 

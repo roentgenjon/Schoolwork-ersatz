@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   Plus,
   X,
@@ -8,6 +8,8 @@ import {
   Music,
   Archive,
   ExternalLink,
+  Upload,
+  Download,
 } from 'lucide-react'
 import AppLayout from '../components/layout/AppLayout'
 import Header from '../components/layout/Header'
@@ -32,10 +34,22 @@ function getFileIconColor(fileType: string): string {
   return '#007AFF'
 }
 
+const MAX_FILE_BYTES = 750 * 1024 // 750 KB (fits in D1 as base64)
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+}
+
 interface NewHandoutForm {
   title: string
   description: string
   file_url: string
+  file_name: string
   file_type: string
   class_id: string
 }
@@ -48,10 +62,13 @@ export default function HandoutsPage() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [dragging, setDragging] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [form, setForm] = useState<NewHandoutForm>({
     title: '',
     description: '',
     file_url: '',
+    file_name: '',
     file_type: 'application/pdf',
     class_id: '',
   })
@@ -73,22 +90,60 @@ export default function HandoutsPage() {
     fetchClasses()
   }, [fetchClasses])
 
+  async function handleFile(file: File) {
+    if (file.size > MAX_FILE_BYTES) {
+      setError(`Datei zu groß. Maximal ${Math.round(MAX_FILE_BYTES / 1024)} KB erlaubt.`)
+      return
+    }
+    const dataUrl = await fileToDataUrl(file)
+    setForm(f => ({
+      ...f,
+      file_url: dataUrl,
+      file_name: file.name,
+      file_type: file.type || 'application/octet-stream',
+      title: f.title || file.name.replace(/\.[^.]+$/, ''),
+    }))
+    setError(null)
+  }
+
+  function onFileInput(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (file) handleFile(file)
+    e.target.value = ''
+  }
+
+  function onDragOver(e: React.DragEvent) {
+    e.preventDefault()
+    setDragging(true)
+  }
+
+  function onDragLeave() {
+    setDragging(false)
+  }
+
+  function onDrop(e: React.DragEvent) {
+    e.preventDefault()
+    setDragging(false)
+    const file = e.dataTransfer.files[0]
+    if (file) handleFile(file)
+  }
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!form.title.trim() || !form.file_url.trim() || !form.class_id) return
+    if (!form.title.trim() || !form.file_url || !form.class_id) return
     setCreating(true)
     setError(null)
     try {
       const newHandout = await client.post<Handout>('/handouts', {
         title: form.title.trim(),
         description: form.description.trim(),
-        file_url: form.file_url.trim(),
+        file_url: form.file_url,
         file_type: form.file_type,
         class_id: form.class_id,
       })
-      setHandouts((prev) => [newHandout, ...prev])
+      setHandouts(prev => [newHandout, ...prev])
       setShowCreateModal(false)
-      setForm({ title: '', description: '', file_url: '', file_type: 'application/pdf', class_id: '' })
+      setForm({ title: '', description: '', file_url: '', file_name: '', file_type: 'application/pdf', class_id: '' })
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -97,23 +152,24 @@ export default function HandoutsPage() {
   }
 
   const getClassName = (classId: string) =>
-    classes.find((c) => c.id === classId)?.name ?? classId
+    classes.find(c => c.id === classId)?.name ?? classId
 
-  const fileTypes = [
-    { value: 'application/pdf', label: 'PDF' },
-    { value: 'image/png', label: 'Bild (PNG)' },
-    { value: 'image/jpeg', label: 'Bild (JPEG)' },
-    { value: 'video/mp4', label: 'Video (MP4)' },
-    { value: 'application/zip', label: 'ZIP-Archiv' },
-    { value: 'text/plain', label: 'Textdatei' },
-    { value: 'application/msword', label: 'Word-Dokument' },
-  ]
+  function openHandout(handout: Handout) {
+    if (handout.file_url.startsWith('data:')) {
+      const a = document.createElement('a')
+      a.href = handout.file_url
+      a.download = handout.title
+      a.click()
+    } else {
+      window.open(handout.file_url, '_blank', 'noopener')
+    }
+  }
 
   return (
     <AppLayout>
       <div className="flex flex-col h-full">
         <Header
-          title="Handouts"
+          title="Materialien"
           actions={
             isTeacher || isAdmin ? (
               <button
@@ -122,7 +178,7 @@ export default function HandoutsPage() {
                 style={{ backgroundColor: '#007AFF' }}
               >
                 <Plus size={16} />
-                Neues Handout
+                Neues Material
               </button>
             ) : undefined
           }
@@ -131,32 +187,32 @@ export default function HandoutsPage() {
         <div className="flex-1 ios-scroll px-6 py-4">
           {loading ? (
             <div className="flex items-center justify-center h-32">
-              <p className="text-[#8E8E93]">Lade Handouts...</p>
+              <p className="text-[#8E8E93]">Lade Materialien...</p>
             </div>
           ) : handouts.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-48 gap-3">
-              <p className="text-[#8E8E93]">Noch keine Handouts vorhanden.</p>
+              <p className="text-[#8E8E93]">Noch keine Materialien vorhanden.</p>
               {(isTeacher || isAdmin) && (
                 <button
                   onClick={() => setShowCreateModal(true)}
                   className="px-6 py-3 rounded-full text-white text-sm font-medium"
                   style={{ backgroundColor: '#007AFF' }}
                 >
-                  Erstes Handout erstellen
+                  Erstes Material erstellen
                 </button>
               )}
             </div>
           ) : (
             <div className="space-y-3">
-              {handouts.map((handout) => {
+              {handouts.map(handout => {
                 const iconColor = getFileIconColor(handout.file_type)
+                const isData = handout.file_url?.startsWith('data:')
                 return (
                   <div
                     key={handout.id}
                     className="flex items-center gap-4 p-4 rounded-2xl"
                     style={{ backgroundColor: '#1C1C1E' }}
                   >
-                    {/* File type icon */}
                     <div
                       className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0"
                       style={{ backgroundColor: `${iconColor}20`, color: iconColor }}
@@ -164,7 +220,6 @@ export default function HandoutsPage() {
                       {getFileIcon(handout.file_type)}
                     </div>
 
-                    {/* Content */}
                     <div className="flex-1 min-w-0">
                       <h3 className="text-white font-medium truncate">{handout.title}</h3>
                       {handout.description && (
@@ -185,15 +240,12 @@ export default function HandoutsPage() {
                       </div>
                     </div>
 
-                    {/* Open link */}
-                    <a
-                      href={handout.file_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                    <button
+                      onClick={() => openHandout(handout)}
                       className="w-10 h-10 rounded-full flex items-center justify-center text-[#007AFF] hover:bg-[#2C2C2E] transition-all duration-200 shrink-0"
                     >
-                      <ExternalLink size={18} />
-                    </a>
+                      {isData ? <Download size={18} /> : <ExternalLink size={18} />}
+                    </button>
                   </div>
                 )
               })}
@@ -201,7 +253,6 @@ export default function HandoutsPage() {
           )}
         </div>
 
-        {/* Create handout modal */}
         {showCreateModal && (
           <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center">
             <div
@@ -210,11 +261,11 @@ export default function HandoutsPage() {
               onClick={() => setShowCreateModal(false)}
             />
             <div
-              className="relative w-full md:max-w-lg rounded-t-3xl md:rounded-2xl p-6 z-10 max-h-[85vh] flex flex-col"
+              className="relative w-full md:max-w-lg rounded-t-3xl md:rounded-2xl p-6 z-10 max-h-[90vh] flex flex-col"
               style={{ backgroundColor: '#1C1C1E' }}
             >
-              <div className="flex items-center justify-between mb-6 shrink-0">
-                <h3 className="text-white font-semibold text-lg">Neues Handout</h3>
+              <div className="flex items-center justify-between mb-5 shrink-0">
+                <h3 className="text-white font-semibold text-lg">Neues Material</h3>
                 <button
                   onClick={() => setShowCreateModal(false)}
                   className="w-8 h-8 rounded-full flex items-center justify-center text-[#8E8E93] hover:bg-[#2C2C2E]"
@@ -224,6 +275,45 @@ export default function HandoutsPage() {
               </div>
 
               <form onSubmit={handleCreate} className="space-y-4 ios-scroll flex-1 overflow-y-auto">
+                {/* File drop zone */}
+                <div
+                  onDragOver={onDragOver}
+                  onDragLeave={onDragLeave}
+                  onDrop={onDrop}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex flex-col items-center justify-center gap-2 p-6 rounded-xl cursor-pointer transition-all"
+                  style={{
+                    backgroundColor: dragging ? '#007AFF20' : '#2C2C2E',
+                    border: `2px dashed ${dragging ? '#007AFF' : form.file_url ? '#34C759' : '#48484A'}`,
+                    minHeight: 100,
+                  }}
+                >
+                  {form.file_url ? (
+                    <>
+                      <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ backgroundColor: '#34C75920', color: '#34C759' }}>
+                        {getFileIcon(form.file_type)}
+                      </div>
+                      <p className="text-white text-sm font-medium text-center">{form.file_name}</p>
+                      <p className="text-[#8E8E93] text-xs">Tippen zum Ändern</p>
+                    </>
+                  ) : (
+                    <>
+                      <Upload size={24} className="text-[#8E8E93]" />
+                      <p className="text-white text-sm font-medium">Datei auswählen</p>
+                      <p className="text-[#8E8E93] text-xs text-center">
+                        Hierher ziehen oder tippen · Max. 750 KB
+                      </p>
+                    </>
+                  )}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    className="hidden"
+                    onChange={onFileInput}
+                    accept="*/*"
+                  />
+                </div>
+
                 <div className="flex flex-col rounded-xl overflow-hidden" style={{ backgroundColor: '#2C2C2E' }}>
                   <label className="px-4 pt-3 text-xs text-[#8E8E93] font-medium uppercase tracking-wide">
                     Titel
@@ -231,9 +321,9 @@ export default function HandoutsPage() {
                   <input
                     type="text"
                     value={form.title}
-                    onChange={(e) => setForm({ ...form, title: e.target.value })}
-                    placeholder="Handout-Titel"
-                    className="px-4 pb-3 pt-1 bg-transparent text-white placeholder-[#48484A] min-h-[44px]"
+                    onChange={e => setForm({ ...form, title: e.target.value })}
+                    placeholder="Material-Titel"
+                    className="px-4 pb-3 pt-1 bg-transparent text-white placeholder-[#48484A] outline-none min-h-[44px]"
                   />
                 </div>
 
@@ -243,41 +333,11 @@ export default function HandoutsPage() {
                   </label>
                   <textarea
                     value={form.description}
-                    onChange={(e) => setForm({ ...form, description: e.target.value })}
+                    onChange={e => setForm({ ...form, description: e.target.value })}
                     placeholder="Optionale Beschreibung..."
                     rows={2}
-                    className="px-4 pb-3 pt-1 bg-transparent text-white placeholder-[#48484A] resize-none"
+                    className="px-4 pb-3 pt-1 bg-transparent text-white placeholder-[#48484A] resize-none outline-none"
                   />
-                </div>
-
-                <div className="flex flex-col rounded-xl overflow-hidden" style={{ backgroundColor: '#2C2C2E' }}>
-                  <label className="px-4 pt-3 text-xs text-[#8E8E93] font-medium uppercase tracking-wide">
-                    Datei-URL
-                  </label>
-                  <input
-                    type="url"
-                    value={form.file_url}
-                    onChange={(e) => setForm({ ...form, file_url: e.target.value })}
-                    placeholder="https://..."
-                    className="px-4 pb-3 pt-1 bg-transparent text-white placeholder-[#48484A] min-h-[44px]"
-                  />
-                </div>
-
-                <div className="flex flex-col rounded-xl overflow-hidden" style={{ backgroundColor: '#2C2C2E' }}>
-                  <label className="px-4 pt-3 text-xs text-[#8E8E93] font-medium uppercase tracking-wide">
-                    Dateityp
-                  </label>
-                  <select
-                    value={form.file_type}
-                    onChange={(e) => setForm({ ...form, file_type: e.target.value })}
-                    className="px-4 pb-3 pt-1 bg-transparent text-white min-h-[44px] appearance-none"
-                  >
-                    {fileTypes.map((ft) => (
-                      <option key={ft.value} value={ft.value} style={{ backgroundColor: '#2C2C2E' }}>
-                        {ft.label}
-                      </option>
-                    ))}
-                  </select>
                 </div>
 
                 <div className="flex flex-col rounded-xl overflow-hidden" style={{ backgroundColor: '#2C2C2E' }}>
@@ -286,11 +346,11 @@ export default function HandoutsPage() {
                   </label>
                   <select
                     value={form.class_id}
-                    onChange={(e) => setForm({ ...form, class_id: e.target.value })}
-                    className="px-4 pb-3 pt-1 bg-transparent text-white min-h-[44px] appearance-none"
+                    onChange={e => setForm({ ...form, class_id: e.target.value })}
+                    className="px-4 pb-3 pt-1 bg-transparent text-white min-h-[44px] appearance-none outline-none"
                   >
                     <option value="" style={{ backgroundColor: '#2C2C2E' }}>Klasse auswählen</option>
-                    {classes.map((cls) => (
+                    {classes.map(cls => (
                       <option key={cls.id} value={cls.id} style={{ backgroundColor: '#2C2C2E' }}>
                         {cls.name} — {cls.subject}
                       </option>
@@ -302,20 +362,14 @@ export default function HandoutsPage() {
 
                 <button
                   type="submit"
-                  disabled={!form.title.trim() || !form.file_url.trim() || !form.class_id || creating}
+                  disabled={!form.title.trim() || !form.file_url || !form.class_id || creating}
                   className="w-full py-4 rounded-xl font-semibold transition-all duration-200 active:scale-95 min-h-[52px]"
                   style={{
-                    backgroundColor:
-                      form.title.trim() && form.file_url.trim() && form.class_id && !creating
-                        ? '#007AFF'
-                        : '#2C2C2E',
-                    color:
-                      form.title.trim() && form.file_url.trim() && form.class_id && !creating
-                        ? '#fff'
-                        : '#8E8E93',
+                    backgroundColor: form.title.trim() && form.file_url && form.class_id && !creating ? '#007AFF' : '#2C2C2E',
+                    color: form.title.trim() && form.file_url && form.class_id && !creating ? '#fff' : '#8E8E93',
                   }}
                 >
-                  {creating ? 'Wird erstellt...' : 'Handout erstellen'}
+                  {creating ? 'Wird gespeichert...' : 'Material erstellen'}
                 </button>
               </form>
             </div>

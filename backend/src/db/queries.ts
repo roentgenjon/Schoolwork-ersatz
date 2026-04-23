@@ -194,10 +194,10 @@ export async function getAllAssignments(db: D1Database): Promise<Assignment[]> {
 export async function insertAssignment(db: D1Database, a: Assignment): Promise<void> {
   await db
     .prepare(
-      `INSERT INTO assignments (id, class_id, title, description, type, due_date, points, created_by, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO assignments (id, class_id, title, description, type, due_date, points, created_by, created_at, file_url)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
-    .bind(a.id, a.class_id, a.title, a.description, a.type, a.due_date, a.points, a.created_by, a.created_at)
+    .bind(a.id, a.class_id, a.title, a.description, a.type, a.due_date, a.points, a.created_by, a.created_at, a.file_url ?? null)
     .run();
 }
 
@@ -379,9 +379,10 @@ export async function getAllChatRooms(db: D1Database): Promise<ChatRoom[]> {
   return result.results;
 }
 
-export async function getChatRoomsForStudent(
+export async function getChatRoomsForUser(
   db: D1Database,
-  studentId: string
+  userId: string,
+  role: string
 ): Promise<ChatRoom[]> {
   const result = await db
     .prepare(
@@ -392,31 +393,42 @@ export async function getChatRoomsForStudent(
        WHERE r.type = 'class' AND cm.student_id = ?
        UNION
        SELECT r.* FROM chat_rooms r
-       WHERE r.type = 'dm' AND (r.id LIKE '%' || ? || '%')`
-    )
-    .bind(studentId, studentId)
-    .all<ChatRoom>();
-  return result.results;
-}
-
-export async function getChatRoomsForTeacher(
-  db: D1Database,
-  teacherId: string
-): Promise<ChatRoom[]> {
-  const result = await db
-    .prepare(
-      `SELECT r.* FROM chat_rooms r WHERE r.type = 'global'
-       UNION
-       SELECT r.* FROM chat_rooms r
        INNER JOIN classes c ON c.id = r.class_id
        WHERE r.type = 'class' AND c.teacher_id = ?
        UNION
        SELECT r.* FROM chat_rooms r
-       WHERE r.type = 'dm' AND (r.id LIKE '%' || ? || '%')`
+       WHERE r.type = 'dm' AND r.id LIKE '%' || ? || '%'
+       UNION
+       SELECT r.* FROM chat_rooms r
+       INNER JOIN chat_room_members crm ON crm.room_id = r.id
+       WHERE r.type = 'group' AND crm.user_id = ?`
     )
-    .bind(teacherId, teacherId)
+    .bind(userId, userId, userId, userId)
     .all<ChatRoom>();
   return result.results;
+}
+
+export async function getChatRoomsForStudent(db: D1Database, studentId: string): Promise<ChatRoom[]> {
+  return getChatRoomsForUser(db, studentId, 'student');
+}
+
+export async function getChatRoomsForTeacher(db: D1Database, teacherId: string): Promise<ChatRoom[]> {
+  return getChatRoomsForUser(db, teacherId, 'teacher');
+}
+
+export async function insertChatRoomMember(db: D1Database, roomId: string, userId: string): Promise<void> {
+  await db
+    .prepare('INSERT OR IGNORE INTO chat_room_members (room_id, user_id) VALUES (?, ?)')
+    .bind(roomId, userId)
+    .run();
+}
+
+export async function getChatRoomMemberIds(db: D1Database, roomId: string): Promise<string[]> {
+  const result = await db
+    .prepare('SELECT user_id FROM chat_room_members WHERE room_id = ?')
+    .bind(roomId)
+    .all<{ user_id: string }>();
+  return result.results.map(r => r.user_id);
 }
 
 export async function insertChatRoom(db: D1Database, room: ChatRoom): Promise<void> {

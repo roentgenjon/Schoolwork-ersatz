@@ -24,7 +24,7 @@ const navItems: NavItem[] = [
   { to: '/classes', icon: <BookOpen size={20} />, label: 'Klassen' },
   { to: '/assignments', icon: <ClipboardList size={20} />, label: 'Aufgaben' },
   { to: '/progress', icon: <TrendingUp size={20} />, label: 'Fortschritt' },
-  { to: '/handouts', icon: <FileText size={20} />, label: 'Handouts' },
+  { to: '/handouts', icon: <FileText size={20} />, label: 'Materialien' },
   { to: '/chat', icon: <MessageSquare size={20} />, label: 'Chat' },
   { to: '/users', icon: <Users size={20} />, label: 'Nutzer', adminOnly: true },
 ]

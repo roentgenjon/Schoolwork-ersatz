@@ -18,6 +18,7 @@ interface ChatStore {
   sendMessage: (content: string) => void
   setActiveRoom: (roomId: string) => void
   createDmRoom: (target: User) => Promise<ChatRoom>
+  createGroupRoom: (name: string, memberIds: string[]) => Promise<ChatRoom>
   disconnect: () => void
 }
 
@@ -101,6 +102,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       const exists = state.rooms.find((r) => r.id === room.id)
       return exists ? {} : { rooms: [...state.rooms, room] }
     })
+    return room
+  },
+
+  createGroupRoom: async (name: string, memberIds: string[]): Promise<ChatRoom> => {
+    const room = await client.post<ChatRoom>('/chat/rooms/group', { name, member_ids: memberIds })
+    set((state) => ({ rooms: [...state.rooms, room] }))
     return room
   },
 

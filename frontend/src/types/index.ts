@@ -31,6 +31,7 @@ export interface Assignment {
   points: number
   created_by: string
   created_at: number
+  file_url?: string | null
 }
 
 export interface Submission {

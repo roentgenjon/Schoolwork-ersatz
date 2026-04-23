@@ -44,6 +44,7 @@ assignments.post('/', async (c) => {
     type?: string;
     due_date?: number;
     points?: number;
+    file_url?: string | null;
   };
   try {
     body = await c.req.json();
@@ -75,6 +76,7 @@ assignments.post('/', async (c) => {
     points: body.points ?? 100,
     created_by: user.id,
     created_at: Math.floor(Date.now() / 1000),
+    file_url: body.file_url ?? null,
   };
 
   await insertAssignment(c.env.DB, assignment);

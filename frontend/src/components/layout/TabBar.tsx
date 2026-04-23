@@ -17,7 +17,7 @@ export default function TabBar() {
     { to: '/', icon: <LayoutDashboard size={22} />, label: 'Dashboard' },
     { to: '/classes', icon: <BookOpen size={22} />, label: 'Klassen' },
     { to: '/assignments', icon: <ClipboardList size={22} />, label: 'Aufgaben' },
-    { to: '/handouts', icon: <FileText size={22} />, label: 'Handouts' },
+    { to: '/handouts', icon: <FileText size={22} />, label: 'Materialien' },
     { to: '/chat', icon: <MessageSquare size={22} />, label: 'Chat' },
     ...(isAdmin ? [{ to: '/users', icon: <Users size={22} />, label: 'Nutzer' }] : []),
   ]

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   Plus,
   X,
@@ -10,6 +10,8 @@ import {
   CheckCircle,
   Clock,
   Send,
+  Upload,
+  Download,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import AppLayout from '../components/layout/AppLayout'
@@ -31,7 +33,7 @@ const assignmentTypeIcons: Record<AssignmentType, React.ReactNode> = {
 
 const assignmentTypeLabels: Record<AssignmentType, string> = {
   quiz: 'Quiz',
-  handout: 'Handout',
+  handout: 'Arbeitsblatt',
   activity: 'Aktivität',
   book_report: 'Buchbericht',
   collaboration: 'Zusammenarbeit',
@@ -53,6 +55,17 @@ const statusLabels: Record<SubmissionStatus, string> = {
   graded: 'Benotet',
 }
 
+const MAX_FILE_BYTES = 750 * 1024
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+}
+
 interface NewAssignmentForm {
   title: string
   description: string
@@ -60,6 +73,8 @@ interface NewAssignmentForm {
   class_id: string
   due_date: string
   points: string
+  file_url: string
+  file_name: string
 }
 
 const tabs: { key: TabFilter; label: string }[] = [
@@ -84,6 +99,8 @@ export default function AssignmentsPage() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [dragging, setDragging] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [form, setForm] = useState<NewAssignmentForm>({
     title: '',
     description: '',
@@ -91,6 +108,8 @@ export default function AssignmentsPage() {
     class_id: '',
     due_date: '',
     points: '100',
+    file_url: '',
+    file_name: '',
   })
 
   useEffect(() => {
@@ -129,6 +148,22 @@ export default function AssignmentsPage() {
     })
   }
 
+  async function handleFile(file: File) {
+    if (file.size > MAX_FILE_BYTES) {
+      setError(`Datei zu groß. Maximal ${Math.round(MAX_FILE_BYTES / 1024)} KB erlaubt.`)
+      return
+    }
+    const dataUrl = await fileToDataUrl(file)
+    setForm(f => ({ ...f, file_url: dataUrl, file_name: file.name }))
+    setError(null)
+  }
+
+  function onFileInput(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (file) handleFile(file)
+    e.target.value = ''
+  }
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!form.title.trim() || !form.class_id) return
@@ -142,6 +177,7 @@ export default function AssignmentsPage() {
         class_id: form.class_id,
         due_date: form.due_date ? new Date(form.due_date).getTime() : null,
         points: parseInt(form.points) || 100,
+        file_url: form.file_url || null,
       })
       setShowCreateModal(false)
       setForm({
@@ -151,6 +187,8 @@ export default function AssignmentsPage() {
         class_id: '',
         due_date: '',
         points: '100',
+        file_url: '',
+        file_name: '',
       })
     } catch (err) {
       setError((err as Error).message)
@@ -266,6 +304,25 @@ export default function AssignmentsPage() {
                             <span className="text-xs text-[#8E8E93]">
                               {assignment.points} Punkte
                             </span>
+                            {assignment.file_url && (
+                              <button
+                                onClick={() => {
+                                  if (assignment.file_url!.startsWith('data:')) {
+                                    const a = document.createElement('a')
+                                    a.href = assignment.file_url!
+                                    a.download = assignment.title
+                                    a.click()
+                                  } else {
+                                    window.open(assignment.file_url!, '_blank', 'noopener')
+                                  }
+                                }}
+                                className="flex items-center gap-1 text-xs"
+                                style={{ color: '#007AFF' }}
+                              >
+                                <Download size={11} />
+                                Anhang
+                              </button>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -372,6 +429,36 @@ export default function AssignmentsPage() {
                     rows={3}
                     className="px-4 pb-3 pt-1 bg-transparent text-white placeholder-[#48484A] resize-none"
                   />
+                </div>
+
+                {/* Optional file attachment */}
+                <div
+                  onDragOver={e => { e.preventDefault(); setDragging(true) }}
+                  onDragLeave={() => setDragging(false)}
+                  onDrop={e => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) handleFile(f) }}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex flex-col items-center justify-center gap-1.5 p-4 rounded-xl cursor-pointer transition-all"
+                  style={{
+                    backgroundColor: dragging ? '#007AFF20' : '#2C2C2E',
+                    border: `2px dashed ${dragging ? '#007AFF' : form.file_url ? '#34C759' : '#48484A'}`,
+                    minHeight: 80,
+                  }}
+                >
+                  {form.file_url ? (
+                    <>
+                      <Download size={18} style={{ color: '#34C759' }} />
+                      <p className="text-white text-xs font-medium text-center">{form.file_name}</p>
+                      <p className="text-[#8E8E93] text-xs">Tippen zum Ändern</p>
+                    </>
+                  ) : (
+                    <>
+                      <Upload size={18} className="text-[#8E8E93]" />
+                      <p className="text-[#8E8E93] text-xs text-center">
+                        Datei anhängen (optional) · Ziehen oder tippen · Max. 750 KB
+                      </p>
+                    </>
+                  )}
+                  <input ref={fileInputRef} type="file" className="hidden" onChange={onFileInput} accept="*/*" />
                 </div>
 
                 <div
