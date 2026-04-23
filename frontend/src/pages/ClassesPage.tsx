@@ -50,7 +50,6 @@ export default function ClassesPage() {
         subject: form.subject.trim(),
         color: form.color,
         icon: form.icon,
-        teacher_id: '',
       })
       setShowCreateModal(false)
       setForm({ name: '', subject: '', color: CLASS_COLORS[0]!, icon: CLASS_ICONS[0]! })

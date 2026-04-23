@@ -55,7 +55,7 @@ classes.post('/', async (c) => {
   const cls: Class = {
     id: crypto.randomUUID(),
     name: body.name.trim(),
-    teacher_id: user.role === 'teacher' ? user.id : (body as { teacher_id?: string }).teacher_id ?? user.id,
+    teacher_id: user.role === 'teacher' ? user.id : ((body as { teacher_id?: string }).teacher_id || user.id),
     subject: body.subject ?? null,
     color: body.color ?? null,
     icon: body.icon ?? null,

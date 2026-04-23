@@ -8,7 +8,7 @@ interface ClassStore {
   loading: boolean
   error: string | null
   fetchClasses: () => Promise<void>
-  createClass: (data: Omit<Class, 'id' | 'created_at'>) => Promise<void>
+  createClass: (data: Omit<Class, 'id' | 'created_at' | 'teacher_id'>) => Promise<void>
   selectClass: (id: string) => void
   deleteClass: (id: string) => Promise<void>
 }
