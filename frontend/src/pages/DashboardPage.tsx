@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { School, ClipboardList, FileText, Users, ArrowRight } from 'lucide-react';
 import Header from '../components/layout/Header';
@@ -9,12 +9,19 @@ export default function DashboardPage() {
   const { user } = useAuthStore();
   const { classes, assignments, handouts, users, fetchClasses, fetchAssignments, fetchHandouts, fetchUsers } = useAppStore();
   const navigate = useNavigate();
+  const [fetchError, setFetchError] = useState('');
+  const [dataLoading, setDataLoading] = useState(true);
 
   useEffect(() => {
-    fetchClasses();
-    fetchAssignments();
-    fetchHandouts();
-    if (user?.role === 'admin') fetchUsers();
+    setDataLoading(true);
+    setFetchError('');
+    const fetches: Promise<void>[] = [
+      fetchClasses().catch(() => {}),
+      fetchAssignments().catch(() => {}),
+      fetchHandouts().catch(() => {}),
+    ];
+    if (user?.role === 'admin') fetches.push(fetchUsers().catch(() => {}));
+    Promise.all(fetches).finally(() => setDataLoading(false));
   }, []);
 
   const pending = assignments.filter((a) => {
@@ -55,6 +62,12 @@ export default function DashboardPage() {
           <h2 className="text-2xl font-bold text-gray-900">{greeting}, {user?.name?.split(' ')[0]}!</h2>
           <p className="text-gray-500 mt-1 capitalize">{user?.role}</p>
         </div>
+        {fetchError && (
+          <div className="bg-red-50 text-red-600 px-4 py-3 rounded-xl text-sm">{fetchError}</div>
+        )}
+        {dataLoading && (
+          <div className="text-center text-gray-400 py-4 text-sm">Laden…</div>
+        )}
 
         <div className="grid grid-cols-3 gap-3">
           {stats.map(({ icon: Icon, label, value, path, color }) => (

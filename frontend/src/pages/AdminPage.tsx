@@ -15,7 +15,7 @@ const ROLE_COLORS: Record<string, string> = {
 };
 
 export default function AdminPage() {
-  const { users, fetchUsers } = useAppStore();
+  const { users, fetchUsers, fetchChatRooms } = useAppStore();
   const { user: currentUser } = useAuthStore();
   const [editingPerms, setEditingPerms] = useState<User | null>(null);
   const [loading, setLoading] = useState<Record<string, boolean>>({});
@@ -27,6 +27,7 @@ export default function AdminPage() {
     setDeletingChats(true);
     try {
       await api.delete('/api/chat/all');
+      await fetchChatRooms();
       setError('');
     } catch (e: any) {
       setError(e.message);

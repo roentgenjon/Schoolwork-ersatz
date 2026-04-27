@@ -241,6 +241,9 @@ export function AssignmentDetailPage() {
   const [assignment, setAssignment] = useState<Assignment | null>(null);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
+  const [pageError, setPageError] = useState('');
+  const [submitLoading, setSubmitLoading] = useState(false);
+  const [submitError, setSubmitError] = useState('');
   const [attUrl, setAttUrl] = useState('');
   const [attName, setAttName] = useState('');
   const [attType, setAttType] = useState<'link' | 'file'>('link');
@@ -250,10 +253,16 @@ export function AssignmentDetailPage() {
 
   async function load() {
     if (!id) return;
-    const data = await api.get<Assignment & { submissions: Submission[] }>(`/api/assignments/${id}`);
-    setAssignment(data);
-    setSubmissions(data.submissions || []);
-    setLoading(false);
+    try {
+      setPageError('');
+      const data = await api.get<Assignment & { submissions: Submission[] }>(`/api/assignments/${id}`);
+      setAssignment(data);
+      setSubmissions(data.submissions || []);
+    } catch (e: any) {
+      setPageError(e.message || 'Fehler beim Laden');
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => { load(); }, [id]);
@@ -261,39 +270,69 @@ export function AssignmentDetailPage() {
   async function handleAddAttachment(e: React.FormEvent) {
     e.preventDefault();
     if (!id || !attUrl.trim() || !attName.trim()) return;
-    await api.post(`/api/assignments/${id}/attachments`, { type: attType, url: attUrl.trim(), name: attName.trim() });
-    await load();
-    setAttUrl(''); setAttName(''); setShowAddAtt(false);
+    try {
+      await api.post(`/api/assignments/${id}/attachments`, { type: attType, url: attUrl.trim(), name: attName.trim() });
+      await load();
+      setAttUrl(''); setAttName(''); setShowAddAtt(false);
+    } catch (e: any) {
+      setSubmitError(e.message || 'Fehler beim Hinzufügen');
+    }
   }
 
   async function handleDeleteAttachment(attId: string) {
     if (!id) return;
-    await api.delete(`/api/assignments/${id}/attachments/${attId}`);
-    setAssignment((a) => a ? { ...a, attachments: a.attachments?.filter((att) => att.id !== attId) } : a);
+    try {
+      await api.delete(`/api/assignments/${id}/attachments/${attId}`);
+      setAssignment((a) => a ? { ...a, attachments: a.attachments?.filter((att) => att.id !== attId) } : a);
+    } catch (e: any) {
+      setSubmitError(e.message || 'Fehler beim Löschen');
+    }
   }
 
   async function handleDelete() {
     if (!id || !confirm('Aufgabe löschen?')) return;
-    await api.delete(`/api/assignments/${id}`);
-    navigate('/assignments');
+    try {
+      await api.delete(`/api/assignments/${id}`);
+      navigate('/assignments');
+    } catch (e: any) {
+      setSubmitError(e.message || 'Fehler beim Löschen');
+    }
   }
 
   async function handleSubmit(status: string) {
-    const existing = submissions.find((s) => s.student_id === user?.id);
-    if (existing) {
-      await api.put(`/api/submissions/${existing.id}`, { status });
-    } else {
-      await api.post('/api/submissions', { assignment_id: id, status });
+    setSubmitLoading(true);
+    setSubmitError('');
+    try {
+      const existing = submissions.find((s) => s.student_id === user?.id);
+      if (existing) {
+        await api.put(`/api/submissions/${existing.id}`, { status });
+      } else {
+        await api.post('/api/submissions', { assignment_id: id, status });
+      }
+      await load();
+    } catch (e: any) {
+      setSubmitError(e.message || 'Fehler beim Einreichen');
+    } finally {
+      setSubmitLoading(false);
     }
-    await load();
   }
 
   async function handleGrade(subId: string, score: number, feedback: string) {
-    await api.put(`/api/submissions/${subId}`, { status: 'graded', score, feedback });
-    await load();
+    try {
+      await api.put(`/api/submissions/${subId}`, { status: 'graded', score, feedback });
+      await load();
+    } catch (e: any) {
+      setSubmitError(e.message || 'Fehler beim Bewerten');
+    }
   }
 
   if (loading) return <div className="flex-1 flex items-center justify-center text-gray-400">Laden…</div>;
+  if (pageError) return (
+    <div className="flex-1 flex flex-col items-center justify-center gap-3 text-gray-500">
+      <p className="text-red-500">{pageError}</p>
+      <button onClick={load} className="text-sm text-blue-600 hover:underline">Erneut versuchen</button>
+    </div>
+  );
   if (!assignment) return <div className="flex-1 flex items-center justify-center text-gray-400">Nicht gefunden</div>;
 
   const mySubmission = submissions.find((s) => s.student_id === user?.id);
@@ -364,6 +403,10 @@ export function AssignmentDetailPage() {
           />
         </div>
 
+        {submitError && (
+          <div className="bg-red-50 text-red-600 px-4 py-3 rounded-xl text-sm">{submitError}</div>
+        )}
+
         {/* Student: submit button */}
         {user?.role === 'student' && (
           <div className="bg-white rounded-2xl border border-gray-200 p-5 space-y-3">
@@ -379,28 +422,28 @@ export function AssignmentDetailPage() {
                 {mySubmission.feedback && (
                   <p className="text-sm text-gray-600 bg-gray-50 px-3 py-2 rounded-xl">{mySubmission.feedback}</p>
                 )}
-                {mySubmission.status === 'not_started' || mySubmission.status === 'in_progress' ? (
+                {(mySubmission.status === 'not_started' || mySubmission.status === 'in_progress') && (
                   <div className="flex gap-2">
-                    <button onClick={() => handleSubmit('in_progress')}
-                      className="flex-1 border border-gray-200 text-gray-700 py-2.5 rounded-xl text-sm font-medium hover:bg-gray-50">
-                      In Bearbeitung
+                    <button onClick={() => handleSubmit('in_progress')} disabled={submitLoading}
+                      className="flex-1 border border-gray-200 text-gray-700 py-2.5 rounded-xl text-sm font-medium hover:bg-gray-50 disabled:opacity-50">
+                      {submitLoading ? '…' : 'In Bearbeitung'}
                     </button>
-                    <button onClick={() => handleSubmit('turned_in')}
-                      className="flex-1 bg-blue-600 text-white py-2.5 rounded-xl text-sm font-medium hover:bg-blue-700 flex items-center justify-center gap-2">
-                      <CheckCircle2 className="w-4 h-4" /> Einreichen
+                    <button onClick={() => handleSubmit('turned_in')} disabled={submitLoading}
+                      className="flex-1 bg-blue-600 text-white py-2.5 rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2">
+                      <CheckCircle2 className="w-4 h-4" /> {submitLoading ? 'Einreichen…' : 'Einreichen'}
                     </button>
                   </div>
-                ) : null}
+                )}
               </div>
             ) : (
               <div className="flex gap-2">
-                <button onClick={() => handleSubmit('in_progress')}
-                  className="flex-1 border border-gray-200 text-gray-700 py-2.5 rounded-xl text-sm font-medium hover:bg-gray-50">
-                  In Bearbeitung
+                <button onClick={() => handleSubmit('in_progress')} disabled={submitLoading}
+                  className="flex-1 border border-gray-200 text-gray-700 py-2.5 rounded-xl text-sm font-medium hover:bg-gray-50 disabled:opacity-50">
+                  {submitLoading ? '…' : 'In Bearbeitung'}
                 </button>
-                <button onClick={() => handleSubmit('turned_in')}
-                  className="flex-1 bg-blue-600 text-white py-2.5 rounded-xl text-sm font-medium hover:bg-blue-700 flex items-center justify-center gap-2">
-                  <CheckCircle2 className="w-4 h-4" /> Einreichen
+                <button onClick={() => handleSubmit('turned_in')} disabled={submitLoading}
+                  className="flex-1 bg-blue-600 text-white py-2.5 rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2">
+                  <CheckCircle2 className="w-4 h-4" /> {submitLoading ? 'Einreichen…' : 'Einreichen'}
                 </button>
               </div>
             )}

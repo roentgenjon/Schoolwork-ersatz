@@ -260,8 +260,8 @@ export default function ChatPage() {
                 <span className="truncate">{roomLabel(room)}</span>
               </button>
 
-              {/* Only non-global rooms can be deleted; admins can delete all, others only their DMs */}
-              {room.type !== 'global' && (isAdmin || room.type === 'dm') && (
+              {/* DM rooms deletable by anyone; group rooms by admin/teacher */}
+              {(room.type === 'dm' || (room.type === 'group' && (isAdmin || user?.role === 'teacher'))) && (
                 <button
                   onClick={() => handleDeleteRoom(room.id)}
                   className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all rounded"
