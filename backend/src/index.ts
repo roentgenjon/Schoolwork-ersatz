@@ -9,7 +9,7 @@ import {
 } from './routes/assignments';
 import { listHandouts, createHandout, deleteHandout } from './routes/handouts';
 import { getProgress } from './routes/progress';
-import { listRooms, getRoomMessages, chatWebSocket } from './routes/chat';
+import { listRooms, createRoom, deleteRoom, getRoomMessages, chatWebSocket } from './routes/chat';
 
 export { ChatRoom };
 
@@ -142,6 +142,11 @@ export default {
 
       // Chat
       else if (path === '/api/chat/rooms' && method === 'GET') response = await listRooms(request, env);
+      else if (path === '/api/chat/rooms' && method === 'POST') response = await createRoom(request, env);
+      else if (path.match(/^\/api\/chat\/rooms\/([^/]+)$/) && method === 'DELETE') {
+        const [, roomId] = path.match(/^\/api\/chat\/rooms\/([^/]+)$/)!;
+        response = await deleteRoom(request, env, roomId);
+      }
       else if (path.match(/^\/api\/chat\/rooms\/([^/]+)\/messages$/) && method === 'GET') {
         const [, roomId] = path.match(/^\/api\/chat\/rooms\/([^/]+)\/messages$/)!;
         response = await getRoomMessages(request, env, roomId);

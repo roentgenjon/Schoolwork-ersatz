@@ -63,12 +63,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   addMessage(roomId, msg) {
-    set((s) => ({
-      messages: {
-        ...s.messages,
-        [roomId]: [...(s.messages[roomId] ?? []), msg],
-      },
-    }));
+    set((s) => {
+      const existing = s.messages[roomId] ?? [];
+      // Deduplicate: ignore if message with same id already present
+      if (existing.some((m) => m.id === msg.id)) return s;
+      return {
+        messages: { ...s.messages, [roomId]: [...existing, msg] },
+      };
+    });
   },
 
   setActiveRoom(roomId) {

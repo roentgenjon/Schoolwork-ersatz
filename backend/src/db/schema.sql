@@ -87,8 +87,15 @@ CREATE TABLE IF NOT EXISTS chat_messages (
 CREATE TABLE IF NOT EXISTS chat_rooms (
   id TEXT PRIMARY KEY,
   name TEXT,
-  type TEXT NOT NULL CHECK(type IN ('global', 'class', 'dm')),
+  type TEXT NOT NULL CHECK(type IN ('global', 'class', 'dm', 'group')),
   class_id TEXT REFERENCES classes(id) ON DELETE CASCADE
+);
+
+-- Members of DM and group chat rooms
+CREATE TABLE IF NOT EXISTS chat_room_members (
+  room_id TEXT REFERENCES chat_rooms(id) ON DELETE CASCADE,
+  user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+  PRIMARY KEY (room_id, user_id)
 );
 
 -- Default global chat room

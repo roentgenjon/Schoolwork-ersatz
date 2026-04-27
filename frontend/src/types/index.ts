@@ -76,7 +76,7 @@ export interface Handout {
 export interface ChatRoom {
   id: string;
   name: string;
-  type: 'global' | 'class' | 'dm';
+  type: 'global' | 'class' | 'dm' | 'group';
   class_id?: string;
 }
 
