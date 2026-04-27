@@ -152,6 +152,22 @@ export async function getRoomMessages(request: Request, env: Env, roomId: string
   return json(results.reverse());
 }
 
+// DELETE /api/chat/all  – admin: wipe every message + all dm/group rooms
+export async function deleteAllChats(request: Request, env: Env): Promise<Response> {
+  const user = await authenticate(request, env);
+  const err = requireRole(user, 'admin');
+  if (err) return err;
+
+  // Delete all messages first
+  await env.DB.prepare('DELETE FROM chat_messages').run();
+
+  // Delete dm and group rooms (global + class rooms stay)
+  await env.DB.prepare("DELETE FROM chat_room_members WHERE room_id IN (SELECT id FROM chat_rooms WHERE type IN ('dm','group'))").run();
+  await env.DB.prepare("DELETE FROM chat_rooms WHERE type IN ('dm','group')").run();
+
+  return json({ ok: true });
+}
+
 // WS /api/chat/ws/:room_id
 export async function chatWebSocket(request: Request, env: Env, roomId: string): Promise<Response> {
   const url = new URL(request.url);

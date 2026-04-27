@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Shield, Trash2, LogOut as ForceLogoutIcon, Settings2, UserCog, RefreshCw } from 'lucide-react';
+import { Shield, Trash2, LogOut as ForceLogoutIcon, Settings2, RefreshCw, MessageSquareX } from 'lucide-react';
 import Header from '../components/layout/Header';
 import PermissionsEditor from '../components/admin/PermissionsEditor';
 import { useAppStore } from '../store/appStore';
@@ -20,6 +20,20 @@ export default function AdminPage() {
   const [editingPerms, setEditingPerms] = useState<User | null>(null);
   const [loading, setLoading] = useState<Record<string, boolean>>({});
   const [error, setError] = useState('');
+  const [deletingChats, setDeletingChats] = useState(false);
+
+  async function handleDeleteAllChats() {
+    if (!confirm('Wirklich ALLE Nachrichten und alle DM/Gruppen-Räume löschen? Diese Aktion kann nicht rückgängig gemacht werden.')) return;
+    setDeletingChats(true);
+    try {
+      await api.delete('/api/chat/all');
+      setError('');
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setDeletingChats(false);
+    }
+  }
 
   useEffect(() => { fetchUsers(); }, []);
 
@@ -157,6 +171,30 @@ export default function AdminPage() {
         <Section title="Admins" list={admins} />
         <Section title="Lehrer" list={teachers} />
         <Section title="Schüler" list={students} />
+
+        {/* Danger zone */}
+        <div className="bg-white rounded-2xl border border-red-200 overflow-hidden">
+          <div className="px-4 py-3 border-b border-red-100 bg-red-50">
+            <h3 className="text-sm font-semibold text-red-600 uppercase tracking-wide">Gefahrenzone</h3>
+          </div>
+          <div className="p-4 flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-medium text-gray-900">Alle Chats löschen</p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Löscht alle Nachrichten sowie alle DM- und Gruppen-Räume unwiderruflich.
+                Der Global-Raum und Klassen-Räume bleiben erhalten.
+              </p>
+            </div>
+            <button
+              onClick={handleDeleteAllChats}
+              disabled={deletingChats}
+              className="flex items-center gap-2 bg-red-600 text-white text-sm font-medium px-4 py-2.5 rounded-xl hover:bg-red-700 disabled:opacity-50 transition-colors whitespace-nowrap flex-shrink-0"
+            >
+              <MessageSquareX className="w-4 h-4" />
+              {deletingChats ? 'Löschen…' : 'Alle Chats löschen'}
+            </button>
+          </div>
+        </div>
       </div>
 
       {editingPerms && (
