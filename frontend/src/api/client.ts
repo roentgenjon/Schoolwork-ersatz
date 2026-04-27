@@ -26,11 +26,11 @@ async function request<T>(
   });
 
   if (!res.ok) {
-    const err = await res.json<{ error: string }>().catch(() => ({ error: res.statusText }));
+    const err = await (res.json() as Promise<{ error: string }>).catch(() => ({ error: res.statusText }));
     throw new Error(err.error || `HTTP ${res.status}`);
   }
 
-  return res.json<T>();
+  return res.json() as Promise<T>;
 }
 
 export const api = {
