@@ -5,11 +5,11 @@ compatibility_date = "2024-01-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "schoolwork-db"
-database_id = "placeholder-replace-after-wrangler-d1-create"
+database_id = "2002c64d-8115-484d-bc9a-85ca20b69611"
 
 [[kv_namespaces]]
 binding = "SESSIONS"
-id = "placeholder-replace-after-wrangler-kv-create"
+id = "72b83a3cd15747a3b4cee36a0f8f7324"
 
 [durable_objects]
 bindings = [
@@ -21,4 +21,4 @@ tag = "v1"
 new_classes = ["ChatRoom"]
 
 [vars]
-FRONTEND_URL = "https://schoolwork.pages.dev"
+FRONTEND_URL = "https://roentgenjon.github.io"
