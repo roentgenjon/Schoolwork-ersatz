@@ -1,11 +1,13 @@
 import type { Env } from './types';
 import { ChatRoom } from './durable/ChatRoom';
 import { register, login, logout, me } from './routes/auth';
-import { listUsers, deleteUser, forceLogout, updatePermissions, updateRole } from './routes/users';
+import { listUsers, createUser, deleteUser, forceLogout, updatePermissions, updateRole } from './routes/users';
+import { readSettings, writeSettings } from './routes/settings';
 import { listClasses, createClass, getClass, updateClass, deleteClass, addStudent, removeStudent } from './routes/classes';
 import {
   listAssignments, createAssignment, getAssignment, updateAssignment, deleteAssignment,
   addAttachment, deleteAttachment, listSubmissions, updateSubmission, upsertSubmission,
+  listSubmissionFiles, uploadSubmissionFile, deleteSubmissionFile,
 } from './routes/assignments';
 import { listHandouts, createHandout, deleteHandout } from './routes/handouts';
 import { getProgress } from './routes/progress';
@@ -50,8 +52,13 @@ export default {
       else if (path === '/api/auth/logout' && method === 'POST') response = await logout(request, env);
       else if (path === '/api/auth/me' && method === 'GET') response = await me(request, env);
 
+      // Settings
+      else if (path === '/api/settings' && method === 'GET') response = await readSettings(request, env);
+      else if (path === '/api/settings' && method === 'PUT') response = await writeSettings(request, env);
+
       // User management (admin)
       else if (path === '/api/users' && method === 'GET') response = await listUsers(request, env);
+      else if (path === '/api/users' && method === 'POST') response = await createUser(request, env);
       else if (path.match(/^\/api\/users\/([^/]+)$/) && method === 'DELETE') {
         const [, id] = path.match(/^\/api\/users\/([^/]+)$/)!;
         response = await deleteUser(request, env, id);
@@ -124,6 +131,18 @@ export default {
       else if (path.match(/^\/api\/submissions\/([^/]+)$/) && method === 'PUT') {
         const [, id] = path.match(/^\/api\/submissions\/([^/]+)$/)!;
         response = await updateSubmission(request, env, id);
+      }
+      else if (path.match(/^\/api\/submissions\/([^/]+)\/files$/) && method === 'GET') {
+        const [, id] = path.match(/^\/api\/submissions\/([^/]+)\/files$/)!;
+        response = await listSubmissionFiles(request, env, id);
+      }
+      else if (path.match(/^\/api\/submissions\/([^/]+)\/files$/) && method === 'POST') {
+        const [, id] = path.match(/^\/api\/submissions\/([^/]+)\/files$/)!;
+        response = await uploadSubmissionFile(request, env, id);
+      }
+      else if (path.match(/^\/api\/submission-files\/([^/]+)$/) && method === 'DELETE') {
+        const [, id] = path.match(/^\/api\/submission-files\/([^/]+)$/)!;
+        response = await deleteSubmissionFile(request, env, id);
       }
 
       // Handouts

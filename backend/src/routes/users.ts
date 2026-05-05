@@ -1,5 +1,5 @@
 import type { Env, User } from '../types';
-import { authenticate, requireRole, destroyAllSessions, hashPassword } from '../middleware/auth';
+import { authenticate, requireAuth, requireRole, destroyAllSessions, hashPassword } from '../middleware/auth';
 import { DEFAULT_PERMISSIONS } from '../types';
 
 function json(data: unknown, status = 200): Response {
@@ -9,15 +9,53 @@ function json(data: unknown, status = 200): Response {
   });
 }
 
-// GET /api/users
-export async function listUsers(request: Request, env: Env): Promise<Response> {
+// POST /api/users  – admin creates a user account (no session created)
+export async function createUser(request: Request, env: Env): Promise<Response> {
   const user = await authenticate(request, env);
   const err = requireRole(user, 'admin');
+  if (err) return err;
+
+  const body = await request.json<{ name: string; role: string; password?: string }>();
+  const { name, role, password } = body;
+
+  if (!name?.trim()) return json({ error: 'Name erforderlich' }, 400);
+  if (!['admin', 'teacher', 'student'].includes(role)) return json({ error: 'Ungültige Rolle' }, 400);
+  if ((role === 'admin' || role === 'teacher') && !password?.trim()) {
+    return json({ error: 'Passwort für Admin/Lehrer erforderlich' }, 400);
+  }
+
+  const existing = await env.DB.prepare('SELECT id FROM users WHERE name = ?')
+    .bind(name.trim()).first();
+  if (existing) return json({ error: 'Name bereits vergeben' }, 409);
+
+  function nanoid(): string {
+    return crypto.randomUUID().replace(/-/g, '').slice(0, 16);
+  }
+
+  const id = nanoid();
+  const perms = DEFAULT_PERMISSIONS[role] ?? [];
+  const passwordHash = password ? await hashPassword(password) : null;
+
+  await env.DB.prepare(
+    'INSERT INTO users (id, name, role, password_hash, permissions) VALUES (?, ?, ?, ?, ?)'
+  ).bind(id, name.trim(), role, passwordHash, JSON.stringify(perms)).run();
+
+  return json({ id, name: name.trim(), role, permissions: perms }, 201);
+}
+
+// GET /api/users  – admin: full list; others: minimal (id, name, role) for user discovery
+export async function listUsers(request: Request, env: Env): Promise<Response> {
+  const user = await authenticate(request, env);
+  const err = requireAuth(user);
   if (err) return err;
 
   const { results } = await env.DB.prepare(
     'SELECT id, name, role, permissions, created_at FROM users ORDER BY role, name'
   ).all<{ id: string; name: string; role: string; permissions: string; created_at: number }>();
+
+  if (user!.role !== 'admin') {
+    return json(results.map((r) => ({ id: r.id, name: r.name, role: r.role })));
+  }
 
   return json(results.map((r) => ({ ...r, permissions: JSON.parse(r.permissions || '[]') })));
 }

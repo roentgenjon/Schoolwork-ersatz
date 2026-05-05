@@ -57,7 +57,7 @@ export async function createRoom(request: Request, env: Env): Promise<Response> 
   const err = requireAuth(user);
   if (err) return err;
 
-  const body = await request.json<{ type: 'dm' | 'group'; target_user_id?: string; name?: string }>();
+  const body = await request.json<{ type: 'dm' | 'group'; target_user_id?: string; name?: string; member_ids?: string[] }>();
 
   if (body.type === 'dm') {
     if (!body.target_user_id) return json({ error: 'target_user_id required for DM' }, 400);
@@ -95,6 +95,15 @@ export async function createRoom(request: Request, env: Env): Promise<Response> 
       .bind(roomId, body.name.trim()).run();
     await env.DB.prepare('INSERT INTO chat_room_members (room_id, user_id) VALUES (?, ?)')
       .bind(roomId, user!.id).run();
+
+    if (Array.isArray(body.member_ids)) {
+      for (const memberId of body.member_ids) {
+        if (memberId !== user!.id) {
+          await env.DB.prepare('INSERT OR IGNORE INTO chat_room_members (room_id, user_id) VALUES (?, ?)')
+            .bind(roomId, memberId).run();
+        }
+      }
+    }
 
     return json({ id: roomId, name: body.name.trim(), type: 'group' }, 201);
   }

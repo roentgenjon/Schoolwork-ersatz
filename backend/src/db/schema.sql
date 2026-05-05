@@ -44,8 +44,10 @@ CREATE TABLE IF NOT EXISTS assignment_attachments (
   id TEXT PRIMARY KEY,
   assignment_id TEXT REFERENCES assignments(id) ON DELETE CASCADE,
   type TEXT NOT NULL CHECK(type IN ('file', 'link')),
-  url TEXT NOT NULL,
+  url TEXT,
   name TEXT NOT NULL,
+  data TEXT,
+  mime_type TEXT,
   created_at INTEGER DEFAULT (unixepoch())
 );
 
@@ -55,11 +57,23 @@ CREATE TABLE IF NOT EXISTS submissions (
   assignment_id TEXT REFERENCES assignments(id) ON DELETE CASCADE,
   student_id TEXT REFERENCES users(id) ON DELETE CASCADE,
   status TEXT NOT NULL DEFAULT 'not_started' CHECK(status IN ('not_started', 'in_progress', 'turned_in', 'returned', 'graded')),
+  content TEXT,
   score INTEGER,
   feedback TEXT,
   submitted_at INTEGER,
   updated_at INTEGER DEFAULT (unixepoch()),
   UNIQUE(assignment_id, student_id)
+);
+
+-- Files attached to student submissions
+CREATE TABLE IF NOT EXISTS submission_files (
+  id TEXT PRIMARY KEY,
+  submission_id TEXT REFERENCES submissions(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  mime_type TEXT NOT NULL,
+  data TEXT NOT NULL,
+  size INTEGER DEFAULT 0,
+  created_at INTEGER DEFAULT (unixepoch())
 );
 
 -- Handouts (materials)

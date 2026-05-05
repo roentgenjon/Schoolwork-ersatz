@@ -12,7 +12,14 @@ function nanoid(): string {
   return crypto.randomUUID().replace(/-/g, '').slice(0, 16);
 }
 
-async function getAttachments(env: Env, assignmentId: string) {
+async function getAttachmentsMeta(env: Env, assignmentId: string) {
+  const { results } = await env.DB.prepare(
+    'SELECT id, assignment_id, type, url, name, mime_type FROM assignment_attachments WHERE assignment_id = ? ORDER BY created_at ASC'
+  ).bind(assignmentId).all();
+  return results;
+}
+
+async function getAttachmentsWithData(env: Env, assignmentId: string) {
   const { results } = await env.DB.prepare(
     'SELECT * FROM assignment_attachments WHERE assignment_id = ? ORDER BY created_at ASC'
   ).bind(assignmentId).all();
@@ -61,11 +68,10 @@ export async function listAssignments(request: Request, env: Env): Promise<Respo
     rows = results;
   }
 
-  // Attach attachments to each assignment
   const assignments = await Promise.all(
     (rows as any[]).map(async (a) => ({
       ...a,
-      attachments: await getAttachments(env, a.id),
+      attachments: await getAttachmentsMeta(env, a.id),
     }))
   );
 
@@ -85,7 +91,7 @@ export async function createAssignment(request: Request, env: Env): Promise<Resp
     type: string;
     due_date?: number;
     points?: number;
-    attachments?: { type: string; url: string; name: string }[];
+    attachments?: { type: string; url?: string; name: string; data?: string; mime_type?: string }[];
   }>();
 
   if (!body.class_id || !body.title?.trim() || !body.type) {
@@ -104,14 +110,14 @@ export async function createAssignment(request: Request, env: Env): Promise<Resp
     await Promise.all(
       body.attachments.map((att) =>
         env.DB.prepare(
-          "INSERT INTO assignment_attachments (id, assignment_id, type, url, name) VALUES (?, ?, ?, ?, ?)"
-        ).bind(nanoid(), id, att.type, att.url, att.name).run()
+          'INSERT INTO assignment_attachments (id, assignment_id, type, url, name, data, mime_type) VALUES (?, ?, ?, ?, ?, ?, ?)'
+        ).bind(nanoid(), id, att.type, att.url ?? null, att.name, att.data ?? null, att.mime_type ?? null).run()
       )
     );
   }
 
   const row = await env.DB.prepare('SELECT * FROM assignments WHERE id = ?').bind(id).first();
-  const attachments = await getAttachments(env, id);
+  const attachments = await getAttachmentsMeta(env, id);
   return json({ ...row, attachments }, 201);
 }
 
@@ -126,19 +132,32 @@ export async function getAssignment(request: Request, env: Env, assignmentId: st
   ).bind(assignmentId).first();
   if (!row) return json({ error: 'Not found' }, 404);
 
-  const attachments = await getAttachments(env, assignmentId);
+  const attachments = await getAttachmentsWithData(env, assignmentId);
 
-  let submissions = [];
+  let submissions: any[] = [];
   if (user!.role !== 'student') {
     const { results } = await env.DB.prepare(
-      'SELECT s.*, u.name as student_name FROM submissions s JOIN users u ON s.student_id = u.id WHERE s.assignment_id = ?'
+      'SELECT s.*, u.name as student_name FROM submissions s JOIN users u ON s.student_id = u.id WHERE s.assignment_id = ? ORDER BY s.updated_at DESC'
     ).bind(assignmentId).all();
-    submissions = results;
+
+    submissions = await Promise.all(
+      (results as any[]).map(async (sub) => {
+        const { results: files } = await env.DB.prepare(
+          'SELECT id, submission_id, name, mime_type, size, data, created_at FROM submission_files WHERE submission_id = ? ORDER BY created_at ASC'
+        ).bind(sub.id).all();
+        return { ...sub, files };
+      })
+    );
   } else {
     const sub = await env.DB.prepare(
       'SELECT * FROM submissions WHERE assignment_id = ? AND student_id = ?'
-    ).bind(assignmentId, user!.id).first();
-    if (sub) submissions = [sub];
+    ).bind(assignmentId, user!.id).first<any>();
+    if (sub) {
+      const { results: files } = await env.DB.prepare(
+        'SELECT id, submission_id, name, mime_type, size, data, created_at FROM submission_files WHERE submission_id = ? ORDER BY created_at ASC'
+      ).bind(sub.id).all();
+      submissions = [{ ...sub, files }];
+    }
   }
 
   return json({ ...row, attachments, submissions });
@@ -189,16 +208,18 @@ export async function addAttachment(request: Request, env: Env, assignmentId: st
   const err = requireRole(user, 'admin', 'teacher');
   if (err) return err;
 
-  const body = await request.json<{ type: string; url: string; name: string }>();
-  if (!body.type || !body.url || !body.name) return json({ error: 'type, url and name required' }, 400);
+  const body = await request.json<{ type: string; url?: string; name: string; data?: string; mime_type?: string }>();
+  if (!body.type || !body.name) return json({ error: 'type and name required' }, 400);
+  if (body.type === 'link' && !body.url) return json({ error: 'url required for link' }, 400);
+  if (body.type === 'file' && !body.data) return json({ error: 'data required for file' }, 400);
   if (!['file', 'link'].includes(body.type)) return json({ error: 'Invalid type' }, 400);
 
   const id = nanoid();
   await env.DB.prepare(
-    'INSERT INTO assignment_attachments (id, assignment_id, type, url, name) VALUES (?, ?, ?, ?, ?)'
-  ).bind(id, assignmentId, body.type, body.url, body.name).run();
+    'INSERT INTO assignment_attachments (id, assignment_id, type, url, name, data, mime_type) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  ).bind(id, assignmentId, body.type, body.url ?? null, body.name, body.data ?? null, body.mime_type ?? null).run();
 
-  return json({ id, assignment_id: assignmentId, ...body }, 201);
+  return json({ id, assignment_id: assignmentId, type: body.type, url: body.url ?? null, name: body.name }, 201);
 }
 
 // DELETE /api/assignments/:id/attachments/:att_id
@@ -240,25 +261,35 @@ export async function updateSubmission(request: Request, env: Env, submissionId:
   ).bind(submissionId).first<{ student_id: string; status: string }>();
   if (!sub) return json({ error: 'Not found' }, 404);
 
-  const body = await request.json<{ status?: string; score?: number; feedback?: string }>();
+  const body = await request.json<{ status?: string; score?: number; feedback?: string; content?: string }>();
 
   if (user!.role === 'student') {
     if (sub.student_id !== user!.id) return json({ error: 'Forbidden' }, 403);
     const allowed = ['in_progress', 'turned_in'];
     if (body.status && !allowed.includes(body.status)) return json({ error: 'Invalid status transition' }, 400);
     await env.DB.prepare(
-      'UPDATE submissions SET status = COALESCE(?, status), submitted_at = CASE WHEN ? = \'turned_in\' THEN unixepoch() ELSE submitted_at END, updated_at = unixepoch() WHERE id = ?'
-    ).bind(body.status ?? null, body.status ?? null, submissionId).run();
+      `UPDATE submissions SET
+        status = COALESCE(?, status),
+        content = COALESCE(?, content),
+        submitted_at = CASE WHEN ? = 'turned_in' THEN unixepoch() ELSE submitted_at END,
+        updated_at = unixepoch()
+       WHERE id = ?`
+    ).bind(body.status ?? null, body.content ?? null, body.status ?? null, submissionId).run();
   } else {
     await env.DB.prepare(
-      'UPDATE submissions SET status = COALESCE(?, status), score = COALESCE(?, score), feedback = COALESCE(?, feedback), updated_at = unixepoch() WHERE id = ?'
+      `UPDATE submissions SET
+        status = COALESCE(?, status),
+        score = COALESCE(?, score),
+        feedback = COALESCE(?, feedback),
+        updated_at = unixepoch()
+       WHERE id = ?`
     ).bind(body.status ?? null, body.score ?? null, body.feedback ?? null, submissionId).run();
   }
 
   return json({ ok: true });
 }
 
-// POST /api/submissions  (student starts/submits)
+// POST /api/submissions  (student upsert)
 export async function upsertSubmission(request: Request, env: Env): Promise<Response> {
   const user = await authenticate(request, env);
   const err = requireAuth(user);
@@ -266,7 +297,7 @@ export async function upsertSubmission(request: Request, env: Env): Promise<Resp
 
   if (user!.role !== 'student') return json({ error: 'Students only' }, 403);
 
-  const body = await request.json<{ assignment_id: string; status: string }>();
+  const body = await request.json<{ assignment_id: string; status: string; content?: string }>();
   if (!body.assignment_id || !body.status) return json({ error: 'assignment_id and status required' }, 400);
 
   const existing = await env.DB.prepare(
@@ -275,14 +306,78 @@ export async function upsertSubmission(request: Request, env: Env): Promise<Resp
 
   if (existing) {
     await env.DB.prepare(
-      'UPDATE submissions SET status = ?, submitted_at = CASE WHEN ? = \'turned_in\' THEN unixepoch() ELSE submitted_at END, updated_at = unixepoch() WHERE id = ?'
-    ).bind(body.status, body.status, existing.id).run();
+      `UPDATE submissions SET
+        status = ?,
+        content = COALESCE(?, content),
+        submitted_at = CASE WHEN ? = 'turned_in' THEN unixepoch() ELSE submitted_at END,
+        updated_at = unixepoch()
+       WHERE id = ?`
+    ).bind(body.status, body.content ?? null, body.status, existing.id).run();
     return json({ id: existing.id, status: body.status });
   } else {
     const id = nanoid();
     await env.DB.prepare(
-      'INSERT INTO submissions (id, assignment_id, student_id, status) VALUES (?, ?, ?, ?)'
-    ).bind(id, body.assignment_id, user!.id, body.status).run();
+      'INSERT INTO submissions (id, assignment_id, student_id, status, content) VALUES (?, ?, ?, ?, ?)'
+    ).bind(id, body.assignment_id, user!.id, body.status, body.content ?? null).run();
     return json({ id, status: body.status }, 201);
   }
+}
+
+// GET /api/submissions/:id/files
+export async function listSubmissionFiles(request: Request, env: Env, submissionId: string): Promise<Response> {
+  const user = await authenticate(request, env);
+  const err = requireAuth(user);
+  if (err) return err;
+
+  const sub = await env.DB.prepare('SELECT student_id FROM submissions WHERE id = ?')
+    .bind(submissionId).first<{ student_id: string }>();
+  if (!sub) return json({ error: 'Not found' }, 404);
+  if (user!.role === 'student' && sub.student_id !== user!.id) return json({ error: 'Forbidden' }, 403);
+
+  const { results } = await env.DB.prepare(
+    'SELECT id, submission_id, name, mime_type, size, data, created_at FROM submission_files WHERE submission_id = ? ORDER BY created_at ASC'
+  ).bind(submissionId).all();
+
+  return json(results);
+}
+
+// POST /api/submissions/:id/files
+export async function uploadSubmissionFile(request: Request, env: Env, submissionId: string): Promise<Response> {
+  const user = await authenticate(request, env);
+  const err = requireAuth(user);
+  if (err) return err;
+
+  const sub = await env.DB.prepare('SELECT student_id FROM submissions WHERE id = ?')
+    .bind(submissionId).first<{ student_id: string }>();
+  if (!sub) return json({ error: 'Not found' }, 404);
+  if (user!.role === 'student' && sub.student_id !== user!.id) return json({ error: 'Forbidden' }, 403);
+
+  const body = await request.json<{ name: string; mime_type: string; data: string; size?: number }>();
+  if (!body.name || !body.data || !body.mime_type) return json({ error: 'name, data, mime_type required' }, 400);
+
+  // Limit ~5MB base64
+  if (body.data.length > 7_000_000) return json({ error: 'Datei zu groß (max. 5 MB)' }, 413);
+
+  const id = nanoid();
+  await env.DB.prepare(
+    'INSERT INTO submission_files (id, submission_id, name, mime_type, data, size) VALUES (?, ?, ?, ?, ?, ?)'
+  ).bind(id, submissionId, body.name, body.mime_type, body.data, body.size ?? 0).run();
+
+  return json({ id, name: body.name, mime_type: body.mime_type, size: body.size ?? 0 }, 201);
+}
+
+// DELETE /api/submission-files/:id
+export async function deleteSubmissionFile(request: Request, env: Env, fileId: string): Promise<Response> {
+  const user = await authenticate(request, env);
+  const err = requireAuth(user);
+  if (err) return err;
+
+  const file = await env.DB.prepare(
+    'SELECT sf.id, s.student_id FROM submission_files sf JOIN submissions s ON sf.submission_id = s.id WHERE sf.id = ?'
+  ).bind(fileId).first<{ student_id: string }>();
+  if (!file) return json({ error: 'Not found' }, 404);
+  if (user!.role === 'student' && file.student_id !== user!.id) return json({ error: 'Forbidden' }, 403);
+
+  await env.DB.prepare('DELETE FROM submission_files WHERE id = ?').bind(fileId).run();
+  return json({ ok: true });
 }

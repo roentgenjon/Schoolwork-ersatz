@@ -27,9 +27,21 @@ export interface Attachment {
   id: string;
   assignment_id: string;
   type: 'file' | 'link';
-  url: string;
+  url: string | null;
   name: string;
+  mime_type?: string | null;
+  data?: string | null;
   created_at?: number;
+}
+
+export interface SubmissionFile {
+  id: string;
+  submission_id: string;
+  name: string;
+  mime_type: string;
+  size: number;
+  data?: string;
+  created_at: number;
 }
 
 export interface Assignment {
@@ -55,10 +67,12 @@ export interface Submission {
   student_id: string;
   student_name?: string;
   status: SubmissionStatus;
+  content: string | null;
   score: number | null;
   feedback: string | null;
   submitted_at: number | null;
   updated_at: number;
+  files?: SubmissionFile[];
 }
 
 export interface Handout {
