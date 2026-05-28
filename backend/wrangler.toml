@@ -21,4 +21,4 @@ tag = "v1"
 new_classes = ["ChatRoom"]
 
 [vars]
-FRONTEND_URL = "https://roentgenjon.github.io"
+FRONTEND_URL = "https://schoolwork-frontend.pages.dev"
