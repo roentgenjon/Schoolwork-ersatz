@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BookOpen, Shield, GraduationCap, School, ArrowRight, Eye, EyeOff } from 'lucide-react';
 import { api } from '../api/client';
@@ -6,6 +6,11 @@ import { useAuthStore } from '../store/authStore';
 import type { Role, User } from '../types';
 
 type Step = 'welcome' | 'role' | 'register' | 'login';
+
+interface AppSettings {
+  registrationOpen: boolean;
+  adminRegistrationAllowed: boolean;
+}
 
 export default function OnboardingPage() {
   const [step, setStep] = useState<Step>('welcome');
@@ -16,8 +21,13 @@ export default function OnboardingPage() {
   const [isLogin, setIsLogin] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [settings, setSettings] = useState<AppSettings>({ registrationOpen: true, adminRegistrationAllowed: true });
   const { setAuth } = useAuthStore();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    api.get<AppSettings>('/api/settings').then(setSettings).catch(() => {});
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -54,12 +64,18 @@ export default function OnboardingPage() {
             <h1 className="text-4xl font-bold tracking-tight">SchoolWork</h1>
             <p className="text-blue-200 text-lg mt-2">Deine Schule. Digital.</p>
           </div>
-          <button
-            onClick={() => setStep('role')}
-            className="w-full bg-white text-blue-700 font-semibold py-4 px-8 rounded-2xl text-lg flex items-center justify-center gap-2 hover:bg-blue-50 transition-colors"
-          >
-            Get Started <ArrowRight className="w-5 h-5" />
-          </button>
+          {settings.registrationOpen ? (
+            <button
+              onClick={() => setStep('role')}
+              className="w-full bg-white text-blue-700 font-semibold py-4 px-8 rounded-2xl text-lg flex items-center justify-center gap-2 hover:bg-blue-50 transition-colors"
+            >
+              Registrieren <ArrowRight className="w-5 h-5" />
+            </button>
+          ) : (
+            <div className="bg-white/10 rounded-2xl px-4 py-3 text-blue-100 text-sm">
+              Registrierung ist deaktiviert. Bitte wende dich an einen Administrator.
+            </div>
+          )}
           <button
             onClick={() => { setIsLogin(true); setStep('register'); }}
             className="text-blue-200 hover:text-white text-sm transition-colors"
@@ -72,11 +88,14 @@ export default function OnboardingPage() {
   }
 
   if (step === 'role') {
-    const roles: { role: Role; icon: typeof Shield; label: string; desc: string; color: string }[] = [
+    const allRoles: { role: Role; icon: typeof Shield; label: string; desc: string; color: string }[] = [
       { role: 'admin', icon: Shield, label: 'Admin', desc: 'Schule verwalten', color: 'bg-purple-100 text-purple-700' },
       { role: 'teacher', icon: GraduationCap, label: 'Lehrer', desc: 'Klassen & Aufgaben', color: 'bg-green-100 text-green-700' },
       { role: 'student', icon: School, label: 'Schüler', desc: 'Lernen & Einreichen', color: 'bg-blue-100 text-blue-700' },
     ];
+    const roles = settings.adminRegistrationAllowed
+      ? allRoles
+      : allRoles.filter((r) => r.role !== 'admin');
 
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-8">
