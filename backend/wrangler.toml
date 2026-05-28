@@ -20,5 +20,9 @@ bindings = [
 tag = "v1"
 new_classes = ["ChatRoom"]
 
+[[r2_buckets]]
+binding = "FILES"
+bucket_name = "schoolwork-files"
+
 [vars]
 FRONTEND_URL = "https://roentgenjon.github.io"

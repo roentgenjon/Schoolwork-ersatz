@@ -150,12 +150,13 @@ export async function getRoomMessages(request: Request, env: Env, roomId: string
   if (err) return err;
 
   const { results } = await env.DB.prepare(`
-    SELECT m.*, u.name as sender_name, u.role as sender_role
+    SELECT m.id, m.room_id, m.sender_id, m.content, m.image_key, m.created_at,
+           u.name as sender_name, u.role as sender_role
     FROM chat_messages m
     LEFT JOIN users u ON m.sender_id = u.id
     WHERE m.room_id = ?
     ORDER BY m.created_at DESC
-    LIMIT 50
+    LIMIT 100
   `).bind(roomId).all();
 
   return json(results.reverse());

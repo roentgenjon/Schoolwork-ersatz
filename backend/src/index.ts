@@ -12,6 +12,7 @@ import {
 import { listHandouts, createHandout, deleteHandout } from './routes/handouts';
 import { getProgress } from './routes/progress';
 import { listRooms, createRoom, deleteRoom, deleteAllChats, getRoomMessages, chatWebSocket } from './routes/chat';
+import { uploadFile, serveFile } from './routes/files';
 
 export { ChatRoom };
 
@@ -174,6 +175,13 @@ export default {
       else if (path.match(/^\/api\/chat\/ws\/([^/]+)$/)) {
         const [, roomId] = path.match(/^\/api\/chat\/ws\/([^/]+)$/)!;
         response = await chatWebSocket(request, env, roomId);
+      }
+
+      // File storage (R2)
+      else if (path === '/api/upload' && method === 'POST') response = await uploadFile(request, env);
+      else if (path.match(/^\/api\/files\/(.+)$/) && method === 'GET') {
+        const [, key] = path.match(/^\/api\/files\/(.+)$/)!;
+        response = await serveFile(request, env, key);
       }
 
       else response = notFound();

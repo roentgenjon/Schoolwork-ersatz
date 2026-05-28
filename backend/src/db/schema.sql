@@ -39,15 +39,15 @@ CREATE TABLE IF NOT EXISTS assignments (
   created_at INTEGER DEFAULT (unixepoch())
 );
 
--- Multiple files/links per assignment
+-- Multiple files/links per assignment (files stored in R2)
 CREATE TABLE IF NOT EXISTS assignment_attachments (
   id TEXT PRIMARY KEY,
   assignment_id TEXT REFERENCES assignments(id) ON DELETE CASCADE,
   type TEXT NOT NULL CHECK(type IN ('file', 'link')),
   url TEXT,
   name TEXT NOT NULL,
-  data TEXT,
   mime_type TEXT,
+  r2_key TEXT,
   created_at INTEGER DEFAULT (unixepoch())
 );
 
@@ -65,13 +65,13 @@ CREATE TABLE IF NOT EXISTS submissions (
   UNIQUE(assignment_id, student_id)
 );
 
--- Files attached to student submissions
+-- Files attached to student submissions (stored in R2; r2_key references the R2 object key)
 CREATE TABLE IF NOT EXISTS submission_files (
   id TEXT PRIMARY KEY,
   submission_id TEXT REFERENCES submissions(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   mime_type TEXT NOT NULL,
-  data TEXT NOT NULL,
+  r2_key TEXT,
   size INTEGER DEFAULT 0,
   created_at INTEGER DEFAULT (unixepoch())
 );
@@ -88,12 +88,13 @@ CREATE TABLE IF NOT EXISTS handouts (
   created_at INTEGER DEFAULT (unixepoch())
 );
 
--- Chat messages
+-- Chat messages (image_key = R2 key for image messages)
 CREATE TABLE IF NOT EXISTS chat_messages (
   id TEXT PRIMARY KEY,
   room_id TEXT NOT NULL,
   sender_id TEXT REFERENCES users(id) ON DELETE SET NULL,
   content TEXT NOT NULL,
+  image_key TEXT,
   created_at INTEGER DEFAULT (unixepoch())
 );
 

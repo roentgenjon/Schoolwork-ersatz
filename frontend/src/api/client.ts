@@ -45,3 +45,26 @@ export function createWebSocket(roomId: string): WebSocket {
   const wsBase = BASE_URL.replace(/^http/, 'ws');
   return new WebSocket(`${wsBase}/api/chat/ws/${roomId}?token=${token}`);
 }
+
+/** Returns an authenticated URL for serving a file from R2. */
+export function fileUrl(r2Key: string): string {
+  const token = getToken();
+  return `${BASE_URL}/api/files/${encodeURIComponent(r2Key)}?token=${token ?? ''}`;
+}
+
+/** Uploads a File to R2 via /api/upload, returns the R2 key. */
+export async function uploadFile(file: File): Promise<string> {
+  const data = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve((reader.result as string).split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+  const res = await request<{ key: string }>('POST', '/api/upload', {
+    name: file.name,
+    mime_type: file.type || 'application/octet-stream',
+    data,
+    size: file.size,
+  });
+  return res.key;
+}

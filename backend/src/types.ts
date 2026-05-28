@@ -2,6 +2,7 @@ export interface Env {
   DB: D1Database;
   SESSIONS: KVNamespace;
   CHAT_ROOM: DurableObjectNamespace;
+  FILES: R2Bucket;
   FRONTEND_URL: string;
   JWT_SECRET: string;
 }

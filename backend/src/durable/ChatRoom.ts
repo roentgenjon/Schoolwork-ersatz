@@ -48,13 +48,19 @@ export class ChatRoom {
     server.addEventListener('message', async (evt) => {
       try {
         const data = JSON.parse(evt.data as string);
-        if (data.type === 'message' && data.content?.trim()) {
+
+        const isText = data.type === 'message' && data.content?.trim();
+        const isImage = data.type === 'image' && data.image_key;
+
+        if (isText || isImage) {
           const msgId = crypto.randomUUID().replace(/-/g, '').slice(0, 16);
           const now = Math.floor(Date.now() / 1000);
+          const content = isImage ? '[Bild]' : (data.content as string).trim();
+          const imageKey: string | null = isImage ? (data.image_key as string) : null;
 
           await this.env.DB.prepare(
-            'INSERT INTO chat_messages (id, room_id, sender_id, content, created_at) VALUES (?, ?, ?, ?, ?)'
-          ).bind(msgId, roomId, user.id, data.content.trim(), now).run();
+            'INSERT INTO chat_messages (id, room_id, sender_id, content, image_key, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+          ).bind(msgId, roomId, user.id, content, imageKey, now).run();
 
           const broadcast = JSON.stringify({
             type: 'message',
@@ -63,7 +69,8 @@ export class ChatRoom {
             sender_id: user.id,
             sender_name: user.name,
             sender_role: user.role,
-            content: data.content.trim(),
+            content,
+            image_key: imageKey,
             created_at: now,
           });
 

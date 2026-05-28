@@ -30,7 +30,7 @@ export interface Attachment {
   url: string | null;
   name: string;
   mime_type?: string | null;
-  data?: string | null;
+  r2_key?: string | null;
   created_at?: number;
 }
 
@@ -40,7 +40,7 @@ export interface SubmissionFile {
   name: string;
   mime_type: string;
   size: number;
-  data?: string;
+  r2_key?: string | null;
   created_at: number;
 }
 
@@ -101,6 +101,7 @@ export interface ChatMessage {
   sender_name?: string;
   sender_role?: Role;
   content: string;
+  image_key?: string | null;
   created_at: number;
 }
 

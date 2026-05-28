@@ -7,7 +7,7 @@ import {
 import Header from '../components/layout/Header';
 import { useAppStore } from '../store/appStore';
 import { useAuthStore } from '../store/authStore';
-import { api } from '../api/client';
+import { api, uploadFile, fileUrl } from '../api/client';
 import type { Assignment, Attachment, Submission, SubmissionFile } from '../types';
 
 const TYPE_LABELS: Record<string, string> = {
@@ -30,24 +30,6 @@ interface AttachmentInput {
   mime_type?: string;
 }
 
-async function fileToBase64(file: File): Promise<{ data: string; mime_type: string; name: string; size: number }> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      resolve({ data: result.split(',')[1], mime_type: file.type || 'application/octet-stream', name: file.name, size: file.size });
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
-function downloadBase64(name: string, mimeType: string, data: string) {
-  const bytes = Uint8Array.from(atob(data), (c) => c.charCodeAt(0));
-  const url = URL.createObjectURL(new Blob([bytes], { type: mimeType }));
-  Object.assign(document.createElement('a'), { href: url, download: name }).click();
-  URL.revokeObjectURL(url);
-}
 
 function FileDropZone({ onFiles }: { onFiles: (files: File[]) => void }) {
   const [dragging, setDragging] = useState(false);
@@ -74,7 +56,7 @@ function AttachmentList({ attachments, onDelete }: { attachments: Attachment[]; 
   if (!attachments.length) return null;
   function open(att: Attachment) {
     if (att.type === 'link' && att.url) window.open(att.url, '_blank', 'noopener noreferrer');
-    else if (att.data && att.mime_type) downloadBase64(att.name, att.mime_type, att.data);
+    else if (att.r2_key) window.open(fileUrl(att.r2_key), '_blank', 'noopener noreferrer');
   }
   return (
     <div className="space-y-2">
@@ -99,21 +81,33 @@ function AttachmentList({ attachments, onDelete }: { attachments: Attachment[]; 
 }
 
 function SubmissionFileRow({ file, onDelete }: { file: SubmissionFile; onDelete?: () => void }) {
+  const isImage = file.mime_type?.startsWith('image/');
   return (
-    <div className="flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2">
-      <FileText className="w-4 h-4 text-gray-400 shrink-0" />
-      <span className="flex-1 text-sm truncate">{file.name}</span>
-      <span className="text-xs text-gray-400 shrink-0">{(file.size / 1024).toFixed(0)} KB</span>
-      {file.data && (
-        <button onClick={() => downloadBase64(file.name, file.mime_type, file.data!)} className="text-blue-600 hover:text-blue-700">
-          <Download className="w-4 h-4" />
-        </button>
+    <div className="space-y-1">
+      {isImage && file.r2_key && (
+        <img
+          src={fileUrl(file.r2_key)}
+          alt={file.name}
+          className="rounded-xl max-w-full max-h-48 object-cover cursor-pointer"
+          onClick={() => window.open(fileUrl(file.r2_key!), '_blank')}
+        />
       )}
-      {onDelete && (
-        <button onClick={onDelete} className="text-gray-400 hover:text-red-500">
-          <X className="w-4 h-4" />
-        </button>
-      )}
+      <div className="flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2">
+        <FileText className="w-4 h-4 text-gray-400 shrink-0" />
+        <span className="flex-1 text-sm truncate">{file.name}</span>
+        <span className="text-xs text-gray-400 shrink-0">{(file.size / 1024).toFixed(0)} KB</span>
+        {file.r2_key && (
+          <a href={fileUrl(file.r2_key)} target="_blank" rel="noopener noreferrer"
+            download={file.name} className="text-blue-600 hover:text-blue-700">
+            <Download className="w-4 h-4" />
+          </a>
+        )}
+        {onDelete && (
+          <button onClick={onDelete} className="text-gray-400 hover:text-red-500">
+            <X className="w-4 h-4" />
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -139,11 +133,15 @@ function CreateAssignmentModal({ onClose, onCreated }: { onClose: () => void; on
   }
 
   async function addFiles(files: File[]) {
+    setLoading(true);
     for (const file of files) {
       if (file.size > 5_000_000) { setError(`${file.name}: max. 5 MB`); continue; }
-      const info = await fileToBase64(file);
-      setAttachments((p) => [...p, { type: 'file', url: '', name: info.name, data: info.data, mime_type: info.mime_type }]);
+      try {
+        const r2_key = await uploadFile(file);
+        setAttachments((p) => [...p, { type: 'file', url: '', name: file.name, r2_key, mime_type: file.type }]);
+      } catch (e: any) { setError(e.message || 'Upload fehlgeschlagen'); }
     }
+    setLoading(false);
   }
 
   async function submit(e: React.FormEvent) {
@@ -376,9 +374,9 @@ export function AssignmentDetailPage() {
     if (!id) return;
     for (const file of files) {
       if (file.size > 5_000_000) { setSubmitError(`${file.name}: max. 5 MB`); continue; }
-      const info = await fileToBase64(file);
       try {
-        await api.post(`/api/assignments/${id}/attachments`, { type: 'file', name: info.name, data: info.data, mime_type: info.mime_type });
+        const r2_key = await uploadFile(file);
+        await api.post(`/api/assignments/${id}/attachments`, { type: 'file', name: file.name, mime_type: file.type, r2_key });
       } catch (e: any) { setSubmitError(e.message || 'Fehler beim Upload'); }
     }
     await load();
@@ -416,8 +414,10 @@ export function AssignmentDetailPage() {
       }
       for (const file of pendingFiles) {
         if (file.size > 5_000_000) { setSubmitError(`${file.name}: max. 5 MB`); return; }
-        const info = await fileToBase64(file);
-        await api.post(`/api/submissions/${submissionId}/files`, info);
+        const r2_key = await uploadFile(file);
+        await api.post(`/api/submissions/${submissionId}/files`, {
+          name: file.name, mime_type: file.type || 'application/octet-stream', size: file.size, r2_key,
+        });
       }
       setPendingFiles([]);
       await load();

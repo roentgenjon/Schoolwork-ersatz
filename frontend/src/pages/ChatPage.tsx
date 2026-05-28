@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { Send, Hash, Globe, Plus, Trash2, Wifi, WifiOff, MessageSquare } from 'lucide-react';
+import { Send, Hash, Globe, Plus, Trash2, Wifi, WifiOff, MessageSquare, Image } from 'lucide-react';
 import Header from '../components/layout/Header';
 import { useAppStore } from '../store/appStore';
 import { useAuthStore } from '../store/authStore';
-import { createWebSocket, api } from '../api/client';
+import { createWebSocket, api, uploadFile, fileUrl } from '../api/client';
 import type { ChatMessage, ChatRoom, User } from '../types';
 
 const ROLE_COLORS: Record<string, string> = {
@@ -152,9 +152,11 @@ export default function ChatPage() {
   const [wsStatus, setWsStatus] = useState<WsStatus>('connecting');
   const [showCreate, setShowCreate] = useState(false);
   const [allUsers, setAllUsers] = useState<User[]>([]);
+  const [uploading, setUploading] = useState(false);
 
   const wsRef = useRef<WebSocket | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const isAdmin = user?.role === 'admin';
 
   useEffect(() => {
@@ -197,6 +199,24 @@ export default function ChatPage() {
     if (!input.trim() || !ws || ws.readyState !== WebSocket.OPEN) return;
     ws.send(JSON.stringify({ type: 'message', content: input.trim() }));
     setInput('');
+  }
+
+  async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    if (file.size > 5_000_000) { alert('Bild zu groß (max. 5 MB)'); return; }
+    setUploading(true);
+    try {
+      const key = await uploadFile(file);
+      ws.send(JSON.stringify({ type: 'image', image_key: key }));
+    } catch (err: any) {
+      alert(err.message || 'Upload fehlgeschlagen');
+    } finally {
+      setUploading(false);
+    }
   }
 
   async function handleDeleteRoom(roomId: string) {
@@ -288,11 +308,20 @@ export default function ChatPage() {
                 )}
                 <div className={`max-w-xs md:max-w-md flex flex-col gap-0.5 ${isMe ? 'items-end' : 'items-start'}`}>
                   {!isMe && <span className="text-xs text-gray-500 px-1">{msg.sender_name}</span>}
-                  <div className={`px-4 py-2.5 rounded-2xl text-sm break-words ${
-                    isMe ? 'bg-blue-600 text-white rounded-tr-sm' : 'bg-gray-100 text-gray-900 rounded-tl-sm'
-                  }`}>
-                    {msg.content}
-                  </div>
+                  {msg.image_key ? (
+                    <img
+                      src={fileUrl(msg.image_key)}
+                      alt="Bild"
+                      className="rounded-2xl max-w-[240px] max-h-[320px] object-cover cursor-pointer"
+                      onClick={() => window.open(fileUrl(msg.image_key!), '_blank')}
+                    />
+                  ) : (
+                    <div className={`px-4 py-2.5 rounded-2xl text-sm break-words ${
+                      isMe ? 'bg-blue-600 text-white rounded-tr-sm' : 'bg-gray-100 text-gray-900 rounded-tl-sm'
+                    }`}>
+                      {msg.content}
+                    </div>
+                  )}
                   <span className="text-xs text-gray-400 px-1">
                     {new Date(msg.created_at * 1000).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
                   </span>
@@ -303,6 +332,24 @@ export default function ChatPage() {
           <div ref={messagesEndRef} />
         </div>
         <form onSubmit={sendMessage} className="border-t border-gray-200 p-3 flex gap-2 bg-white">
+          <input
+            ref={imageInputRef}
+            type="file"
+            accept="image/*"
+            className="sr-only"
+            onChange={handleImageUpload}
+          />
+          <button
+            type="button"
+            onClick={() => imageInputRef.current?.click()}
+            disabled={wsStatus !== 'open' || uploading}
+            title="Bild senden"
+            className="p-2.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-2xl transition-colors disabled:opacity-40 flex-shrink-0"
+          >
+            {uploading
+              ? <div className="w-5 h-5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+              : <Image className="w-5 h-5" />}
+          </button>
           <input type="text" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={handleKeyDown}
             placeholder={wsStatus === 'open' ? 'Nachricht schreiben…' : wsStatus === 'connecting' ? 'Verbinde…' : 'Keine Verbindung'}
             disabled={wsStatus !== 'open'}
