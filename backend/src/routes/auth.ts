@@ -1,6 +1,7 @@
 import type { Env } from '../types';
 import { createSession, destroySession, hashPassword, verifyPassword, authenticate } from '../middleware/auth';
 import { DEFAULT_PERMISSIONS } from '../types';
+import { loadSettings } from './settings';
 
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
@@ -20,6 +21,10 @@ export async function register(request: Request, env: Env): Promise<Response> {
 
   if (!name?.trim()) return json({ error: 'Name required' }, 400);
   if (!['admin', 'teacher', 'student'].includes(role)) return json({ error: 'Invalid role' }, 400);
+
+  const settings = await loadSettings(env);
+  if (!settings.registrationOpen) return json({ error: 'Registrierung ist deaktiviert. Bitte wende dich an einen Administrator.' }, 403);
+  if (role === 'admin' && !settings.adminRegistrationAllowed) return json({ error: 'Admin-Konten können nicht selbst erstellt werden.' }, 403);
 
   if ((role === 'admin' || role === 'teacher') && !password?.trim()) {
     return json({ error: 'Password required for admin/teacher accounts' }, 400);
