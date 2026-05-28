@@ -109,15 +109,9 @@ export async function createAssignment(request: Request, env: Env): Promise<Resp
   if (body.attachments?.length) {
     await Promise.all(
       body.attachments.map(async (att) => {
-        let r2Key = att.r2_key ?? null;
-        if (att.type === 'file' && !r2Key && att.data && att.mime_type) {
-          const bytes = Uint8Array.from(atob(att.data), (c) => c.charCodeAt(0));
-          r2Key = `${nanoid()}-${att.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-          await env.FILES.put(r2Key, bytes, { httpMetadata: { contentType: att.mime_type } });
-        }
         return env.DB.prepare(
           'INSERT INTO assignment_attachments (id, assignment_id, type, url, name, mime_type, r2_key) VALUES (?, ?, ?, ?, ?, ?, ?)'
-        ).bind(nanoid(), id, att.type, att.url ?? null, att.name, att.mime_type ?? null, r2Key).run();
+        ).bind(nanoid(), id, att.type, att.url ?? null, att.name, att.mime_type ?? null, att.r2_key ?? null).run();
       })
     );
   }
@@ -214,27 +208,18 @@ export async function addAttachment(request: Request, env: Env, assignmentId: st
   const err = requireRole(user, 'admin', 'teacher');
   if (err) return err;
 
-  const body = await request.json<{ type: string; url?: string; name: string; r2_key?: string; data?: string; mime_type?: string }>();
+  const body = await request.json<{ type: string; url?: string; name: string; r2_key?: string; mime_type?: string }>();
   if (!body.type || !body.name) return json({ error: 'type and name required' }, 400);
   if (body.type === 'link' && !body.url) return json({ error: 'url required for link' }, 400);
-  if (body.type === 'file' && !body.r2_key && !body.data) return json({ error: 'r2_key or data required for file' }, 400);
+  if (body.type === 'file' && !body.r2_key) return json({ error: 'r2_key required for file' }, 400);
   if (!['file', 'link'].includes(body.type)) return json({ error: 'Invalid type' }, 400);
-
-  let r2Key: string | null = body.r2_key ?? null;
-
-  // Legacy: if data is provided instead of r2_key, upload to R2
-  if (body.type === 'file' && !r2Key && body.data && body.mime_type) {
-    const bytes = Uint8Array.from(atob(body.data), (c) => c.charCodeAt(0));
-    r2Key = `${nanoid()}-${body.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-    await env.FILES.put(r2Key, bytes, { httpMetadata: { contentType: body.mime_type } });
-  }
 
   const id = nanoid();
   await env.DB.prepare(
     'INSERT INTO assignment_attachments (id, assignment_id, type, url, name, mime_type, r2_key) VALUES (?, ?, ?, ?, ?, ?, ?)'
-  ).bind(id, assignmentId, body.type, body.url ?? null, body.name, body.mime_type ?? null, r2Key).run();
+  ).bind(id, assignmentId, body.type, body.url ?? null, body.name, body.mime_type ?? null, body.r2_key ?? null).run();
 
-  return json({ id, assignment_id: assignmentId, type: body.type, url: body.url ?? null, name: body.name, r2_key: r2Key }, 201);
+  return json({ id, assignment_id: assignmentId, type: body.type, url: body.url ?? null, name: body.name, r2_key: body.r2_key ?? null }, 201);
 }
 
 // DELETE /api/assignments/:id/attachments/:att_id
@@ -367,26 +352,15 @@ export async function uploadSubmissionFile(request: Request, env: Env, submissio
   if (!sub) return json({ error: 'Not found' }, 404);
   if (user!.role === 'student' && sub.student_id !== user!.id) return json({ error: 'Forbidden' }, 403);
 
-  const body = await request.json<{ name: string; mime_type: string; r2_key?: string; data?: string; size?: number }>();
-  if (!body.name || !body.mime_type) return json({ error: 'name, mime_type required' }, 400);
-  if (!body.r2_key && !body.data) return json({ error: 'r2_key or data required' }, 400);
-
-  let r2Key = body.r2_key ?? null;
-
-  // Legacy: if data provided, upload to R2
-  if (!r2Key && body.data) {
-    if (body.data.length > 7_000_000) return json({ error: 'Datei zu groß (max. 5 MB)' }, 413);
-    const bytes = Uint8Array.from(atob(body.data), (c) => c.charCodeAt(0));
-    r2Key = `${nanoid()}-${body.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-    await env.FILES.put(r2Key, bytes, { httpMetadata: { contentType: body.mime_type } });
-  }
+  const body = await request.json<{ name: string; mime_type: string; r2_key: string; size?: number }>();
+  if (!body.name || !body.mime_type || !body.r2_key) return json({ error: 'name, mime_type, r2_key required' }, 400);
 
   const id = nanoid();
   await env.DB.prepare(
     'INSERT INTO submission_files (id, submission_id, name, mime_type, r2_key, size) VALUES (?, ?, ?, ?, ?, ?)'
-  ).bind(id, submissionId, body.name, body.mime_type, r2Key, body.size ?? 0).run();
+  ).bind(id, submissionId, body.name, body.mime_type, body.r2_key, body.size ?? 0).run();
 
-  return json({ id, name: body.name, mime_type: body.mime_type, size: body.size ?? 0, r2_key: r2Key }, 201);
+  return json({ id, name: body.name, mime_type: body.mime_type, size: body.size ?? 0, r2_key: body.r2_key }, 201);
 }
 
 // DELETE /api/submission-files/:id

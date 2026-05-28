@@ -115,3 +115,14 @@ CREATE TABLE IF NOT EXISTS chat_room_members (
 
 -- Default global chat room
 INSERT OR IGNORE INTO chat_rooms (id, name, type) VALUES ('global', 'Global', 'global');
+
+-- Uploaded files (stored as base64 in D1; key referenced by submission_files.r2_key, assignment_attachments.r2_key, chat_messages.image_key)
+CREATE TABLE IF NOT EXISTS files (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  mime_type TEXT NOT NULL,
+  data TEXT NOT NULL,
+  size INTEGER DEFAULT 0,
+  uploaded_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+  created_at INTEGER DEFAULT (unixepoch())
+);

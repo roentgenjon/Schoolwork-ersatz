@@ -11,7 +11,7 @@ function json(data: unknown, status = 200): Response {
 
 // POST /api/upload
 // Body: { name, mime_type, data (base64), size }
-// Returns: { key }
+// Stores in D1 files table, returns { key }
 export async function uploadFile(request: Request, env: Env): Promise<Response> {
   const user = await authenticate(request, env);
   const err = requireAuth(user);
@@ -19,22 +19,18 @@ export async function uploadFile(request: Request, env: Env): Promise<Response> 
 
   const body = await request.json<{ name: string; mime_type: string; data: string; size?: number }>();
   if (!body.name || !body.mime_type || !body.data) return json({ error: 'name, mime_type, data required' }, 400);
-  if (body.data.length > 7_000_000) return json({ error: 'Datei zu groß (max. 5 MB)' }, 413);
+  if (body.data.length > 6_800_000) return json({ error: 'Datei zu groß (max. 5 MB)' }, 413);
 
-  const bytes = Uint8Array.from(atob(body.data), (c) => c.charCodeAt(0));
-  const key = `${nanoid()}-${body.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-
-  await env.FILES.put(key, bytes, {
-    httpMetadata: { contentType: body.mime_type },
-    customMetadata: { originalName: body.name, uploadedBy: user!.id },
-  });
+  const key = nanoid();
+  await env.DB.prepare(
+    'INSERT INTO files (id, name, mime_type, data, size, uploaded_by) VALUES (?, ?, ?, ?, ?, ?)'
+  ).bind(key, body.name, body.mime_type, body.data, body.size ?? 0, user!.id).run();
 
   return json({ key }, 201);
 }
 
-// GET /api/files/:key  (token via Authorization header or ?token= query param)
+// GET /api/files/:key  (auth via Authorization header or ?token= query param for <img> tags)
 export async function serveFile(request: Request, env: Env, key: string): Promise<Response> {
-  // Auth: accept token from header or query param (needed for <img> tags)
   let token: string | null = null;
   const authHeader = request.headers.get('Authorization');
   if (authHeader?.startsWith('Bearer ')) {
@@ -47,14 +43,17 @@ export async function serveFile(request: Request, env: Env, key: string): Promis
   const userId = await env.SESSIONS.get(`session:${token}`);
   if (!userId) return json({ error: 'Unauthorized' }, 401);
 
-  const object = await env.FILES.get(key);
-  if (!object) return json({ error: 'Not found' }, 404);
+  const file = await env.DB.prepare(
+    'SELECT name, mime_type, data FROM files WHERE id = ?'
+  ).bind(key).first<{ name: string; mime_type: string; data: string }>();
+  if (!file) return json({ error: 'Not found' }, 404);
 
-  const headers = new Headers();
-  headers.set('Content-Type', object.httpMetadata?.contentType || 'application/octet-stream');
-  headers.set('Cache-Control', 'private, max-age=3600');
-  const name = object.customMetadata?.originalName || key;
-  headers.set('Content-Disposition', `inline; filename="${name}"`);
-
-  return new Response(object.body, { headers });
+  const bytes = Uint8Array.from(atob(file.data), (c) => c.charCodeAt(0));
+  return new Response(bytes, {
+    headers: {
+      'Content-Type': file.mime_type,
+      'Content-Disposition': `inline; filename="${file.name}"`,
+      'Cache-Control': 'private, max-age=3600',
+    },
+  });
 }
