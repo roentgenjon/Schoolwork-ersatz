@@ -31,7 +31,7 @@ function AttachmentList({ attachments, onDelete }: { attachments: Attachment[]; 
       {attachments.map((att) => (
         <div key={att.id} className="flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2">
           {att.type === 'link' ? <Link className="w-4 h-4 text-blue-500 flex-shrink-0" /> : <Paperclip className="w-4 h-4 text-gray-500 flex-shrink-0" />}
-          <a href={att.url} target="_blank" rel="noopener noreferrer" className="flex-1 text-sm text-blue-600 hover:underline truncate">
+          <a href={att.url ?? undefined} target="_blank" rel="noopener noreferrer" className="flex-1 text-sm text-blue-600 hover:underline truncate">
             {att.name}
           </a>
           <ExternalLink className="w-3 h-3 text-gray-400" />
