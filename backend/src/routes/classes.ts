@@ -121,7 +121,8 @@ export async function deleteClass(request: Request, env: Env, classId: string): 
   if (!cls) return json({ error: 'Not found' }, 404);
   if (user!.role === 'teacher' && cls.teacher_id !== user!.id) return json({ error: 'Forbidden' }, 403);
 
-  // Remove class chat room (messages cascade via FK)
+  // Remove class chat room and its messages
+  await env.DB.prepare('DELETE FROM chat_messages WHERE room_id IN (SELECT id FROM chat_rooms WHERE class_id = ?)').bind(classId).run();
   await env.DB.prepare('DELETE FROM chat_room_members WHERE room_id IN (SELECT id FROM chat_rooms WHERE class_id = ?)').bind(classId).run();
   await env.DB.prepare('DELETE FROM chat_rooms WHERE class_id = ?').bind(classId).run();
 

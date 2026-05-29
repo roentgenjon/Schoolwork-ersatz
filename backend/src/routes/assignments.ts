@@ -335,7 +335,7 @@ export async function listSubmissionFiles(request: Request, env: Env, submission
   if (user!.role === 'student' && sub.student_id !== user!.id) return json({ error: 'Forbidden' }, 403);
 
   const { results } = await env.DB.prepare(
-    'SELECT id, submission_id, name, mime_type, size, data, created_at FROM submission_files WHERE submission_id = ? ORDER BY created_at ASC'
+    'SELECT id, submission_id, name, mime_type, size, r2_key, created_at FROM submission_files WHERE submission_id = ? ORDER BY created_at ASC'
   ).bind(submissionId).all();
 
   return json(results);

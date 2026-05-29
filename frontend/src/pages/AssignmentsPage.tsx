@@ -26,7 +26,7 @@ interface AttachmentInput {
   type: 'file' | 'link';
   url: string;
   name: string;
-  data?: string;
+  r2_key?: string;
   mime_type?: string;
 }
 
