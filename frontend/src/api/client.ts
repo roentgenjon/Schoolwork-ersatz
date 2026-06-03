@@ -1,4 +1,4 @@
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8787';
+const BASE_URL = import.meta.env.VITE_API_URL || 'https://schoolwork-backend.jonathanrontgen7.workers.dev';
 
 function getToken(): string | null {
   return localStorage.getItem('token');
